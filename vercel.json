@@ -1,0 +1,29 @@
+{
+  "version": 2,
+  "env": {
+    "DATABASE_URL": "postgresql://postgres.armktldycdurxrycypwd:YOx82nV84FGtFgx2@aws-0-ap-south-1.pooler.supabase.com:6543/postgres"
+  },
+  "builds": [
+    {
+      "src": "frontend/package.json",
+      "use": "@vercel/static-build",
+      "config": {
+        "distDir": "dist"
+      }
+    },
+    {
+      "src": "api/index.py",
+      "use": "@vercel/python"
+    }
+  ],
+  "routes": [
+    {
+      "src": "/api/(.*)",
+      "dest": "api/index.py"
+    },
+    {
+      "src": "/(.*)",
+      "dest": "frontend/$1"
+    }
+  ]
+}
