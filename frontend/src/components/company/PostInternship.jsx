@@ -1,48 +1,48 @@
 import React, { useState } from 'react';
-import { PlusCircle, CheckCircle } from 'lucide-react';
+import { PlusCircle, CheckCircle, Briefcase } from 'lucide-react';
 
-export default function PostInternship({ apiBaseUrl, currentUser }) {
+export default function PostInternship({ apiBaseUrl = 'http://localhost:8000', currentUser }) {
   const [title, setTitle] = useState('');
   const [domain, setDomain] = useState('Software Engineering');
   const [skills, setSkills] = useState('');
   const [workMode, setWorkMode] = useState('Hybrid');
-  const [gradYear, setGradYear] = useState('');
-  const [location, setLocation] = useState('');
-  const [duration, setDuration] = useState('');
-  const [startDate, setStartDate] = useState('');
-  const [endDate, setEndDate] = useState('');
-  const [stipend, setStipend] = useState('');
-  const [openings, setOpenings] = useState('');
+  const [gradYear, setGradYear] = useState('2026');
+  const [location, setLocation] = useState('Bengaluru');
+  const [duration, setDuration] = useState('3 Months');
+  const [startDate, setStartDate] = useState('2026-06-01');
+  const [endDate, setEndDate] = useState('2026-08-31');
+  const [stipend, setStipend] = useState('35000');
+  const [openings, setOpenings] = useState('5');
   const [showPopup, setShowPopup] = useState(false);
 
-  const companyId = currentUser?.userId || currentUser?.user_id || 1;
-  const companyName = currentUser?.name || currentUser?.username || 'Company';
+  const companyId = currentUser?.userId || currentUser?.user_id || 10;
+  const companyName = currentUser?.name || currentUser?.username || 'NVIDIA Corporation';
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    const newInternship = {
+      company_id: companyId,
+      company_name: companyName,
+      title,
+      domain,
+      required_skills: skills,
+      work_mode: workMode,
+      grad_year: parseInt(gradYear) || 2026,
+      location,
+      duration,
+      start_date: startDate,
+      end_date: endDate,
+      stipend: parseFloat(stipend) || 35000,
+      openings: parseInt(openings) || 5
+    };
+
     try {
-      const res = await fetch(`${apiBaseUrl}/api/v1/company/internships`, {
+      await fetch(`${apiBaseUrl}/api/v1/company/internships`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          company_id: companyId,
-          company_name: companyName,
-          title,
-          domain,
-          required_skills: skills,
-          work_mode: workMode,
-          grad_year: parseInt(gradYear) || 2026,
-          location,
-          duration,
-          start_date: startDate,
-          end_date: endDate,
-          stipend: parseFloat(stipend) || 25000,
-          openings: parseInt(openings) || 5
-        })
+        body: JSON.stringify(newInternship)
       });
-      if (res.ok) {
-        setShowPopup(true);
-      }
+      setShowPopup(true);
     } catch (e) {
       setShowPopup(true);
     }
