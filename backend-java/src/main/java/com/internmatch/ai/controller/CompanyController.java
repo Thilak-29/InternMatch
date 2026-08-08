@@ -48,8 +48,14 @@ public class CompanyController {
         String endDate=(String)body.getOrDefault("end_date","2026-08-31");
         double stipend=body.containsKey("stipend")?((Number)body.get("stipend")).doubleValue():35000;
         int openings=body.containsKey("openings")?((Number)body.get("openings")).intValue():5;
+        String deadline=(String)body.getOrDefault("application_deadline","2026-07-15");
 
-        return ResponseEntity.ok(companyService.postInternship(companyId,companyName,title,domain,skills,mode,gradYear,loc,duration,startDate,endDate,stipend,openings));
+        return ResponseEntity.ok(companyService.postInternship(companyId,companyName,title,domain,skills,mode,gradYear,loc,duration,startDate,endDate,stipend,openings,deadline));
+    }
+
+    @PutMapping("/internships/{id}")
+    public ResponseEntity<Map<String,Object>> updateInternship(@PathVariable int id, @RequestBody Map<String,Object> body){
+        return ResponseEntity.ok(companyService.updateInternship(id, body));
     }
 
     @DeleteMapping("/internships/{id}")
@@ -62,7 +68,7 @@ public class CompanyController {
         return ResponseEntity.ok(companyService.getCompanyApplicants(companyId));
     }
 
-    @PutMapping("/applicants/{id}/status")
+    @PutMapping({"/applicants/{id}/status", "/applications/{id}/status"})
     public ResponseEntity<Map<String,Object>> updateStatus(@PathVariable int id,@RequestBody Map<String,Object> body){
         String status=(String)body.get("status");
         String stage=(String)body.getOrDefault("stage","ASSESSMENT");

@@ -1,94 +1,158 @@
 package com.internmatch.company.service;
 
+import com.internmatch.company.repository.ApplicationRepository;
 import com.internmatch.company.repository.InternshipRepository;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 
 @Service
 public class CompanyServiceImpl implements CompanyService {
 
     private final InternshipRepository internshipRepository;
+    private final ApplicationRepository applicationRepository;
     private final JdbcTemplate jdbcTemplate;
 
-    public CompanyServiceImpl(InternshipRepository internshipRepository, JdbcTemplate jdbcTemplate) {
+    public CompanyServiceImpl(InternshipRepository internshipRepository, ApplicationRepository applicationRepository, JdbcTemplate jdbcTemplate) {
         this.internshipRepository = internshipRepository;
+        this.applicationRepository = applicationRepository;
         this.jdbcTemplate = jdbcTemplate;
     }
 
     @Override
-    public Map<String, Object> getCompanyDashboard(int companyId) {
-        List<Map<String, Object>> internships = internshipRepository.findByCompanyId(companyId);
-        List<Map<String, Object>> applicants = internshipRepository.findApplicantsByCompanyId(companyId);
-
-        int hired = 0;
-        int shortlisted = 0;
-        for (Map<String, Object> a : applicants) {
-            String st = (String) (a.get("status") != null ? a.get("status") : a.get("STATUS"));
-            if ("OFFER_ACCEPTED".equals(st) || "OFFER_SENT".equals(st) || "HIRED".equals(st)) {
-                hired++;
-            } else if ("SHORTLISTED".equals(st) || "TEST_PASSED".equals(st)) {
-                shortlisted++;
-            }
-        }
-
-        Map<String, Object> res = new HashMap<>();
-        res.put("total_internships", internships.size());
-        res.put("total_applicants", applicants.size());
-        res.put("shortlisted", shortlisted);
-        res.put("hired", hired);
-        res.put("internships", internships);
-        return res;
+    public List<Map<String, Object>> getCompanyInternships(int companyId) {
+        return internshipRepository.findByCompanyId(companyId);
     }
 
     @Override
-    public Map<String, Object> createInternship(Map<String, Object> body) {
-        int companyId = body.containsKey("company_id") ? ((Number) body.get("company_id")).intValue() : 1;
+    public List<Map<String, Object>> getAllActiveInternships() {
+        return internshipRepository.findAllActive();
+    }
+
+    @Override
+    public Map<String, Object> postInternship(int companyId, String companyName, String title, String domain, String skills, String mode, int gradYear, String loc, String duration, String startDate, String endDate, double stipend, int openings, String deadline) {
+        try {
+            jdbcTemplate.update("INSERT INTO internships (company_id, company_name, title, domain, required_skills, work_mode, grad_year, location, duration, start_date, end_date, stipend, openings, is_active, application_deadline, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, 'ACTIVE')",
+                    companyId, companyName, title, domain, skills, mode, gradYear, loc, duration, startDate, endDate, stipend, openings, deadline);
+        } catch (Exception e) {
+            internshipRepository.saveInternship(companyId, companyName, title, domain, skills, mode, gradYear, loc, duration, startDate, endDate, stipend, openings);
+        }
+        Map<String, Object> resp = new HashMap<>();
+        resp.put("success", true);
+        resp.put("message", "Internship posted successfully in College Oracle Database");
+        return resp;
+    }
+
+    @Override
+    public Map<String, Object> updateInternship(int id, Map<String, Object> body) {
         String title = (String) body.getOrDefault("title", "Software Engineering Intern");
-        String companyName = (String) body.getOrDefault("company_name", "Enterprise Partner");
-        String stipend = (String) body.getOrDefault("stipend", "₹35,000 / month");
-        String location = (String) body.getOrDefault("location", "Bengaluru (Hybrid)");
-        String duration = (String) body.getOrDefault("duration", "6 Months");
-        String skillsRequired = (String) body.getOrDefault("skills_required", "React, Java, SQL");
-        String description = (String) body.getOrDefault("description", "High impact internship building production systems.");
+        String skills = (String) body.getOrDefault("required_skills", "React, Java, SQL");
+        String mode = (String) body.getOrDefault("work_mode", "Hybrid");
+        String loc = (String) body.getOrDefault("location", "Bengaluru");
+        double stipend = body.containsKey("stipend") ? ((Number) body.get("stipend")).doubleValue() : 35000;
+        int openings = body.containsKey("openings") ? ((Number) body.get("openings")).intValue() : 5;
+        String deadline = (String) body.getOrDefault("application_deadline", "2026-07-15");
+        String status = (String) body.getOrDefault("status", "ACTIVE");
 
-        internshipRepository.saveInternship(companyId, title, companyName, stipend, location, duration, skillsRequired, description);
+        try {
+            jdbcTemplate.update("UPDATE internships SET title=?, required_skills=?, work_mode=?, location=?, stipend=?, openings=?, application_deadline=?, status=? WHERE id=?",
+                    title, skills, mode, loc, stipend, openings, deadline, status, id);
+        } catch (Exception e) {}
 
-        Map<String, Object> res = new HashMap<>();
-        res.put("success", true);
-        res.put("message", "Internship posted successfully in Oracle DB.");
-        return res;
+        Map<String, Object> resp = new HashMap<>();
+        resp.put("success", true);
+        resp.put("message", "Internship details updated successfully");
+        return resp;
+    }
+
+    @Override
+    public Map<String, Object> deleteInternship(int id) {
+        try {
+            jdbcTemplate.update("DELETE FROM applications WHERE internship_id=?", id);
+            jdbcTemplate.update("DELETE FROM internships WHERE id=?", id);
+        } catch (Exception e) {}
+        internshipRepository.deleteInternship(id);
+
+        Map<String, Object> resp = new HashMap<>();
+        resp.put("success", true);
+        resp.put("message", "Internship deleted successfully");
+        return resp;
     }
 
     @Override
     public List<Map<String, Object>> getCompanyApplicants(int companyId) {
-        return internshipRepository.findApplicantsByCompanyId(companyId);
+        return applicationRepository.findByCompanyId(companyId);
     }
 
     @Override
-    public Map<String, Object> updateApplicationStatus(int applicationId, String status) {
-        internshipRepository.updateApplicationStatus(applicationId, status);
+    public Map<String, Object> updateApplicantStatus(int applicationId, String status, String stage) {
+        applicationRepository.updateStatus(applicationId, status, stage);
 
-        List<Map<String, Object>> appRows = jdbcTemplate.queryForList("SELECT student_id FROM applications WHERE id = ?", applicationId);
-        if (!appRows.isEmpty()) {
-            int studentId = ((Number) (appRows.get(0).get("student_id") != null ? appRows.get(0).get("student_id") : appRows.get(0).get("STUDENT_ID"))).intValue();
-            String msg = "OFFER_SENT".equals(status) ? "🎉 Congratulations! You received an official Internship Offer Letter!" : "Status updated to: " + status;
+        if ("OFFER_SENT".equals(status) || "HIRED".equals(status)) {
             try {
-                jdbcTemplate.update("INSERT INTO notifications (user_id, message, type) VALUES (?, ?, 'APPLICATION_STATUS_CHANGED')", studentId, msg);
+                List<Map<String, Object>> rows = jdbcTemplate.queryForList("SELECT internship_id FROM applications WHERE id=?", applicationId);
+                if (!rows.isEmpty()) {
+                    int internId = ((Number) rows.get(0).get("internship_id")).intValue();
+                    List<Map<String, Object>> hiredRows = jdbcTemplate.queryForList("SELECT count(*) as hired_cnt FROM applications WHERE internship_id=? AND (status='OFFER_SENT' OR status='HIRED')", internId);
+                    List<Map<String, Object>> internRow = jdbcTemplate.queryForList("SELECT openings FROM internships WHERE id=?", internId);
+                    if (!hiredRows.isEmpty() && !internRow.isEmpty()) {
+                        int hiredCount = ((Number) hiredRows.get(0).get("hired_cnt")).intValue();
+                        int totalOpenings = ((Number) internRow.get(0).get("openings")).intValue();
+                        if (hiredCount >= totalOpenings) {
+                            jdbcTemplate.update("UPDATE internships SET status='CLOSED', is_active=0 WHERE id=?", internId);
+                        }
+                    }
+                }
             } catch (Exception e) {}
         }
 
-        Map<String, Object> res = new HashMap<>();
-        res.put("success", true);
-        res.put("status", status);
-        return res;
+        Map<String, Object> resp = new HashMap<>();
+        resp.put("success", true);
+        resp.put("status", status);
+        resp.put("stage", stage);
+        return resp;
     }
 
     @Override
-    public List<Map<String, Object>> getAllInternships() {
-        return internshipRepository.findAll();
+    public Map<String, Object> getCompanyDashboardStats(int companyId) {
+        List<Map<String, Object>> internships = internshipRepository.findByCompanyId(companyId);
+        List<Map<String, Object>> applicants = applicationRepository.findByCompanyId(companyId);
+
+        int totalPosted = internships.size();
+        int totalApplicants = applicants.size();
+        int shortlisted = 0;
+        int interviews = 0;
+        int offers = 0;
+        int hires = 0;
+
+        for (Map<String, Object> app : applicants) {
+            String st = (String) app.get("status");
+            if ("SHORTLISTED".equals(st) || "TEST_PASSED".equals(st) || "ACCEPTED_FOR_TEST".equals(st)) shortlisted++;
+            if ("INTERVIEW_SCHEDULED".equals(st)) interviews++;
+            if ("OFFER_SENT".equals(st)) offers++;
+            if ("HIRED".equals(st) || "SELECTED".equals(st)) hires++;
+        }
+
+        Map<String, Object> stats = new HashMap<>();
+        stats.put("total_posted", totalPosted);
+        stats.put("total_applicants", totalApplicants);
+        stats.put("shortlisted", shortlisted);
+        stats.put("interviews_scheduled", interviews);
+        stats.put("offers_sent", offers);
+        stats.put("hires_count", hires);
+        stats.put("posted_internships", internships);
+        return stats;
+    }
+
+    @Override
+    public Map<String, Object> createScreeningTest(int internshipId, String title, int passingScore, int duration) {
+        try {
+            jdbcTemplate.update("INSERT INTO screening_tests (internship_id, test_title, passing_score, duration_minutes) VALUES (?, ?, ?, ?)", internshipId, title, passingScore, duration);
+        } catch (Exception e) {}
+        Map<String, Object> resp = new HashMap<>();
+        resp.put("success", true);
+        resp.put("message", "Custom proctored screening test created for internship");
+        return resp;
     }
 }

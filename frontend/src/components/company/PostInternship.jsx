@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { PlusCircle, CheckCircle, Briefcase } from 'lucide-react';
+import { PlusCircle, CheckCircle, Calendar, Clock } from 'lucide-react';
 
 export default function PostInternship({ apiBaseUrl = 'http://localhost:8000', currentUser }) {
   const [title, setTitle] = useState('');
@@ -13,6 +13,7 @@ export default function PostInternship({ apiBaseUrl = 'http://localhost:8000', c
   const [endDate, setEndDate] = useState('2026-08-31');
   const [stipend, setStipend] = useState('35000');
   const [openings, setOpenings] = useState('5');
+  const [deadline, setDeadline] = useState('2026-07-15');
   const [showPopup, setShowPopup] = useState(false);
 
   const companyId = currentUser?.userId || currentUser?.user_id || 10;
@@ -33,7 +34,8 @@ export default function PostInternship({ apiBaseUrl = 'http://localhost:8000', c
       start_date: startDate,
       end_date: endDate,
       stipend: parseFloat(stipend) || 35000,
-      openings: parseInt(openings) || 5
+      openings: parseInt(openings) || 5,
+      application_deadline: deadline
     };
 
     try {
@@ -52,7 +54,10 @@ export default function PostInternship({ apiBaseUrl = 'http://localhost:8000', c
     <div className="glass-card" style={{ padding: '32px', maxWidth: '800px', margin: '0 auto' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '24px' }}>
         <PlusCircle size={24} color="#2563EB" />
-        <h2 style={{ fontSize: '1.4rem', fontWeight: 700, color: 'var(--text-main)' }}>Post New Internship</h2>
+        <div>
+          <h2 style={{ fontSize: '1.4rem', fontWeight: 800, color: 'var(--text-main)' }}>Post New Internship</h2>
+          <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>Publish roles, set application deadline, and specify opening capacity.</p>
+        </div>
       </div>
 
       <form onSubmit={handleSubmit} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
@@ -105,9 +110,16 @@ export default function PostInternship({ apiBaseUrl = 'http://localhost:8000', c
           <input type="date" required className="input-field" value={endDate} onChange={(e) => setEndDate(e.target.value)} />
         </div>
 
-        <div style={{ gridColumn: 'span 2' }}>
-          <label style={{ fontSize: '0.85rem', fontWeight: 700, display: 'block', marginBottom: '6px' }}>NO. OF OPENINGS</label>
+        <div>
+          <label style={{ fontSize: '0.85rem', fontWeight: 700, display: 'block', marginBottom: '6px' }}>TOTAL NO. OF OPENINGS</label>
           <input type="number" required className="input-field" value={openings} onChange={(e) => setOpenings(e.target.value)} placeholder="e.g. 5" />
+        </div>
+
+        <div>
+          <label style={{ fontSize: '0.85rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '6px', color: '#DC2626' }}>
+            <Clock size={14} /> APPLICATION DEADLINE DATE
+          </label>
+          <input type="date" required className="input-field" value={deadline} onChange={(e) => setDeadline(e.target.value)} />
         </div>
 
         <div style={{ gridColumn: 'span 2', marginTop: '12px' }}>
@@ -123,7 +135,7 @@ export default function PostInternship({ apiBaseUrl = 'http://localhost:8000', c
             <CheckCircle size={52} color="#059669" />
             <h3 style={{ fontSize: '1.3rem', fontWeight: 800, color: 'var(--text-main)' }}>Internship Published Successfully!</h3>
             <p style={{ fontSize: '0.9rem', color: 'var(--text-muted)' }}>
-              Your internship listing for <strong>{title || 'Software Engineering Intern'}</strong> is now live on the platform and saved in College Oracle Database.
+              Your internship listing for <strong>{title || 'Software Engineering Intern'}</strong> is now live on the platform with application deadline <strong>{deadline}</strong>.
             </p>
             <button onClick={() => setShowPopup(false)} className="btn-primary" style={{ width: '100%', height: '42px', justifyContent: 'center', marginTop: '8px' }}>
               Awesome!

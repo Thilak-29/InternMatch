@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Briefcase, Search, MapPin, DollarSign, Send, CheckCircle, Sparkles } from 'lucide-react';
+import { Briefcase, Search, MapPin, DollarSign, Send, CheckCircle, Clock, AlertCircle } from 'lucide-react';
 
 export default function ExploreInternships({ apiBaseUrl = 'http://localhost:8000', currentUser }) {
   const [internships, setInternships] = useState([]);
@@ -87,7 +87,7 @@ export default function ExploreInternships({ apiBaseUrl = 'http://localhost:8000
       <div className="glass-card" style={{ padding: '24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px' }}>
         <div>
           <h2 style={{ fontSize: '1.4rem', fontWeight: 700, color: 'var(--text-main)' }}>Explore Live Internships</h2>
-          <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>Real-time internship postings from recruiters in College Oracle Database.</p>
+          <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>Real-time internship postings with application deadlines from recruiters in College Oracle Database.</p>
         </div>
 
         <div style={{ position: 'relative' }}>
@@ -120,20 +120,30 @@ export default function ExploreInternships({ apiBaseUrl = 'http://localhost:8000
             const stipend = job.stipend || job.STIPEND || 25000;
             const skills = job.required_skills || job.REQUIRED_SKILLS || 'Java, SQL';
             const duration = job.duration || job.DURATION || '3 Months';
+            const deadline = job.application_deadline || job.APPLICATION_DEADLINE || '2026-07-30';
+            const isClosed = job.status === 'CLOSED' || job.STATUS === 'CLOSED';
 
             const hasApplied = appliedIds.includes(jobId);
 
             return (
               <div key={jobId} className="glass-card" style={{ padding: '24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px' }}>
                 <div>
-                  <h3 style={{ fontSize: '1.15rem', fontWeight: 700, color: 'var(--text-main)' }}>{title}</h3>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <h3 style={{ fontSize: '1.15rem', fontWeight: 700, color: 'var(--text-main)' }}>{title}</h3>
+                    {isClosed && (
+                      <span className="badge" style={{ background: '#FEE2E2', color: '#DC2626', fontSize: '0.72rem', fontWeight: 700 }}>
+                        Positions Filled
+                      </span>
+                    )}
+                  </div>
                   <div style={{ fontSize: '0.88rem', color: '#2563EB', fontWeight: 600, marginTop: '2px' }}>
                     {company} • <span style={{ color: 'var(--text-muted)' }}>{mode}</span>
                   </div>
-                  <div style={{ display: 'flex', gap: '16px', fontSize: '0.82rem', color: 'var(--text-muted)', marginTop: '8px' }}>
+                  <div style={{ display: 'flex', gap: '16px', fontSize: '0.82rem', color: 'var(--text-muted)', marginTop: '8px', flexWrap: 'wrap' }}>
                     <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}><MapPin size={14} /> {location}</span>
                     <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}><DollarSign size={14} /> ₹{stipend}/mo</span>
                     <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}><Briefcase size={14} /> {duration}</span>
+                    <span style={{ display: 'flex', alignItems: 'center', gap: '4px', color: '#DC2626', fontWeight: 600 }}><Clock size={14} /> Deadline: {deadline}</span>
                   </div>
                   <div style={{ fontSize: '0.8rem', color: 'var(--text-sub)', marginTop: '8px' }}>
                     <strong>Required Skills:</strong> {skills}
@@ -141,7 +151,11 @@ export default function ExploreInternships({ apiBaseUrl = 'http://localhost:8000
                 </div>
 
                 <div>
-                  {hasApplied ? (
+                  {isClosed ? (
+                    <button disabled className="btn-secondary" style={{ padding: '8px 16px', fontSize: '0.85rem', color: '#64748B', background: '#F1F5F9', cursor: 'not-allowed' }}>
+                      Application Closed
+                    </button>
+                  ) : hasApplied ? (
                     <button disabled className="btn-secondary" style={{ padding: '8px 16px', fontSize: '0.85rem', color: '#059669', background: '#ECFDF5', display: 'flex', alignItems: 'center', gap: '6px' }}>
                       <CheckCircle size={16} /> Applied
                     </button>
