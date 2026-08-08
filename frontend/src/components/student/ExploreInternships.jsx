@@ -2,7 +2,15 @@ import React, { useState, useEffect } from 'react';
 import { Briefcase, Search, MapPin, DollarSign, Send, CheckCircle, Clock } from 'lucide-react';
 
 export default function ExploreInternships({ apiBaseUrl = 'http://localhost:8000', currentUser }) {
-  const [internships, setInternships] = useState([]);
+  const [internships, setInternships] = useState(() => {
+    try {
+      const cached = localStorage.getItem('internmatch_posted_jobs');
+      return cached ? JSON.parse(cached) : [];
+    } catch (e) {
+      return [];
+    }
+  });
+
   const [search, setSearch] = useState('');
   const [appliedIds, setAppliedIds] = useState(() => {
     const cached = localStorage.getItem('internmatch_applied_ids');
@@ -25,8 +33,21 @@ export default function ExploreInternships({ apiBaseUrl = 'http://localhost:8000
       const res = await fetch(`${apiBaseUrl}/api/v1/company/internships`);
       if (res.ok) {
         const data = await res.json();
-        if (data && Array.isArray(data) && data.length > 0) {
-          setInternships(data);
+        if (data && Array.isArray(data)) {
+          let local = [];
+          try {
+            const cached = localStorage.getItem('internmatch_posted_jobs');
+            if (cached) local = JSON.parse(cached);
+          } catch (e) {}
+
+          const mergedMap = new Map();
+          [...data, ...local].forEach(job => {
+            const key = job.id || job.ID || job.title || job.TITLE;
+            if (key && !mergedMap.has(key)) {
+              mergedMap.set(key, job);
+            }
+          });
+          setInternships(Array.from(mergedMap.values()));
         }
       }
     } catch (e) {}

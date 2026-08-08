@@ -33,28 +33,55 @@ export default function CompanyDashboard({ apiBaseUrl = 'http://localhost:8000',
   }, [companyId]);
 
   const fetchCompanyData = async () => {
+    let localJobs = [];
+    try {
+      const cached = localStorage.getItem('internmatch_posted_jobs');
+      if (cached) localJobs = JSON.parse(cached);
+    } catch (e) {}
+
     try {
       const res = await fetch(`${apiBaseUrl}/api/v1/company/${companyId}/dashboard`);
       if (res.ok) {
         const data = await res.json();
+        const serverJobs = data.posted_internships || [];
+        const mergedMap = new Map();
+        [...serverJobs, ...localJobs].forEach(job => {
+          const key = job.id || job.ID || job.title;
+          if (key && !mergedMap.has(key)) mergedMap.set(key, job);
+        });
+        const combined = Array.from(mergedMap.values());
         setStats(prev => ({
           ...prev,
           ...data,
-          total_posted: data.total_posted ?? (data.posted_internships ? data.posted_internships.length : 0),
-          posted_internships: data.posted_internships || []
+          total_posted: combined.length,
+          posted_internships: combined
         }));
       }
-    } catch (e) {}
+    } catch (e) {
+      if (localJobs.length > 0) {
+        setStats(prev => ({
+          ...prev,
+          total_posted: localJobs.length,
+          posted_internships: localJobs
+        }));
+      }
+    }
 
     try {
       const internRes = await fetch(`${apiBaseUrl}/api/v1/company/internships`);
       if (internRes.ok) {
         const allInternships = await internRes.json();
         if (allInternships && Array.isArray(allInternships) && allInternships.length > 0) {
+          const mergedMap = new Map();
+          [...allInternships, ...localJobs].forEach(job => {
+            const key = job.id || job.ID || job.title;
+            if (key && !mergedMap.has(key)) mergedMap.set(key, job);
+          });
+          const combined = Array.from(mergedMap.values());
           setStats(prev => ({
             ...prev,
-            total_posted: prev.total_posted > 0 ? prev.total_posted : allInternships.length,
-            posted_internships: prev.posted_internships.length > 0 ? prev.posted_internships : allInternships
+            total_posted: combined.length,
+            posted_internships: combined
           }));
         }
       }
@@ -99,6 +126,17 @@ export default function CompanyDashboard({ apiBaseUrl = 'http://localhost:8000',
   const handleSaveUpdate = async (e) => {
     e.preventDefault();
     const jobId = editingJob.id || editingJob.ID;
+
+    // Update in local cache
+    try {
+      const cached = localStorage.getItem('internmatch_posted_jobs');
+      if (cached) {
+        const list = JSON.parse(cached);
+        const updated = list.map(j => (j.id === jobId ? { ...j, ...editForm } : j));
+        localStorage.setItem('internmatch_posted_jobs', JSON.stringify(updated));
+      }
+    } catch (e) {}
+
     try {
       await fetch(`${apiBaseUrl}/api/v1/company/internships/${jobId}`, {
         method: 'PUT',
@@ -112,6 +150,7 @@ export default function CompanyDashboard({ apiBaseUrl = 'http://localhost:8000',
     } catch (e) {
       setNotificationMsg(`Updated "${editForm.title}".`);
       setEditingJob(null);
+      fetchCompanyData();
       setTimeout(() => setNotificationMsg(''), 4000);
     }
   };
@@ -120,6 +159,16 @@ export default function CompanyDashboard({ apiBaseUrl = 'http://localhost:8000',
     const jobId = job.id || job.ID;
     const title = job.title || job.TITLE || 'Internship';
     if (!window.confirm(`Are you sure you want to delete the internship "${title}"?`)) return;
+
+    // Remove from local cache
+    try {
+      const cached = localStorage.getItem('internmatch_posted_jobs');
+      if (cached) {
+        const list = JSON.parse(cached);
+        const updated = list.filter(j => j.id !== jobId && (j.id || j.ID) !== jobId);
+        localStorage.setItem('internmatch_posted_jobs', JSON.stringify(updated));
+      }
+    } catch (e) {}
 
     try {
       await fetch(`${apiBaseUrl}/api/v1/company/internships/${jobId}`, {
@@ -131,7 +180,8 @@ export default function CompanyDashboard({ apiBaseUrl = 'http://localhost:8000',
     } catch (e) {
       setStats(prev => ({
         ...prev,
-        posted_internships: prev.posted_internships.filter(j => (j.id || j.ID) !== jobId)
+        posted_internships: prev.posted_internships.filter(j => (j.id || j.ID) !== jobId),
+        total_posted: Math.max(0, prev.total_posted - 1)
       }));
       setNotificationMsg(`Internship "${title}" deleted.`);
       setTimeout(() => setNotificationMsg(''), 4000);
