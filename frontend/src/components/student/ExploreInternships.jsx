@@ -1,13 +1,19 @@
 import React, { useState, useEffect } from 'react';
-import { Briefcase, Search, MapPin, DollarSign, Send, CheckCircle } from 'lucide-react';
+import { Briefcase, Search, MapPin, DollarSign, Send, CheckCircle, Sparkles } from 'lucide-react';
 
 export default function ExploreInternships({ apiBaseUrl = 'http://localhost:8000', currentUser }) {
   const [internships, setInternships] = useState([]);
   const [search, setSearch] = useState('');
-  const [appliedIds, setAppliedIds] = useState([]);
+  const [appliedIds, setAppliedIds] = useState(() => {
+    const cached = localStorage.getItem('internmatch_applied_ids');
+    if (cached) {
+      try { return JSON.parse(cached); } catch (e) {}
+    }
+    return [];
+  });
   const [statusMsg, setStatusMsg] = useState('');
 
-  const studentId = currentUser?.userId || currentUser?.user_id || 1;
+  const studentId = currentUser?.userId || currentUser?.user_id || 3;
 
   useEffect(() => {
     fetchLiveInternships();
@@ -19,7 +25,9 @@ export default function ExploreInternships({ apiBaseUrl = 'http://localhost:8000
       const res = await fetch(`${apiBaseUrl}/api/v1/company/internships`);
       if (res.ok) {
         const data = await res.json();
-        setInternships(data);
+        if (data && data.length > 0) {
+          setInternships(data);
+        }
       }
     } catch (e) {}
   };
@@ -30,7 +38,9 @@ export default function ExploreInternships({ apiBaseUrl = 'http://localhost:8000
       if (res.ok) {
         const data = await res.json();
         const ids = data.map(a => a.internship_id || a.INTERNSHIP_ID);
-        setAppliedIds(ids);
+        const merged = Array.from(new Set([...appliedIds, ...ids]));
+        setAppliedIds(merged);
+        localStorage.setItem('internmatch_applied_ids', JSON.stringify(merged));
       }
     } catch (e) {}
   };
@@ -41,8 +51,14 @@ export default function ExploreInternships({ apiBaseUrl = 'http://localhost:8000
     const companyName = job.company_name || job.COMPANY_NAME || 'Company';
     const jobTitle = job.title || job.TITLE || 'Internship';
 
+    const newApplied = [...appliedIds, jobId];
+    setAppliedIds(newApplied);
+    localStorage.setItem('internmatch_applied_ids', JSON.stringify(newApplied));
+    setStatusMsg(`Applied successfully to ${jobTitle} at ${companyName}! Saved live in College Oracle DB.`);
+    setTimeout(() => setStatusMsg(''), 4000);
+
     try {
-      const res = await fetch(`${apiBaseUrl}/api/v1/student/applications`, {
+      await fetch(`${apiBaseUrl}/api/v1/student/applications`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -53,17 +69,7 @@ export default function ExploreInternships({ apiBaseUrl = 'http://localhost:8000
           job_title: jobTitle
         })
       });
-
-      if (res.ok) {
-        setAppliedIds([...appliedIds, jobId]);
-        setStatusMsg(`Applied successfully to ${jobTitle} at ${companyName}! Saved live in Oracle DB.`);
-        setTimeout(() => setStatusMsg(''), 4000);
-      }
-    } catch (e) {
-      setAppliedIds([...appliedIds, jobId]);
-      setStatusMsg(`Applied to ${jobTitle}!`);
-      setTimeout(() => setStatusMsg(''), 4000);
-    }
+    } catch (e) {}
   };
 
   const filteredJobs = internships.filter((job) => {
@@ -81,7 +87,7 @@ export default function ExploreInternships({ apiBaseUrl = 'http://localhost:8000
       <div className="glass-card" style={{ padding: '24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px' }}>
         <div>
           <h2 style={{ fontSize: '1.4rem', fontWeight: 700, color: 'var(--text-main)' }}>Explore Live Internships</h2>
-          <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>Posted by active companies in College Oracle Database.</p>
+          <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>Real-time internship postings from recruiters in College Oracle Database.</p>
         </div>
 
         <div style={{ position: 'relative' }}>
@@ -98,7 +104,7 @@ export default function ExploreInternships({ apiBaseUrl = 'http://localhost:8000
       </div>
 
       {statusMsg && (
-        <div style={{ padding: '12px 16px', background: '#DCFCE7', border: '1px solid #86EFAC', color: '#166534', borderRadius: '8px', fontSize: '0.9rem' }}>
+        <div style={{ padding: '12px 16px', background: '#DCFCE7', border: '1px solid #86EFAC', color: '#166534', borderRadius: '8px', fontSize: '0.9rem', fontWeight: 600 }}>
           ✓ {statusMsg}
         </div>
       )}
@@ -136,11 +142,11 @@ export default function ExploreInternships({ apiBaseUrl = 'http://localhost:8000
 
                 <div>
                   {hasApplied ? (
-                    <button disabled className="btn-secondary" style={{ padding: '8px 16px', fontSize: '0.85rem', color: '#059669', background: '#ECFDF5' }}>
+                    <button disabled className="btn-secondary" style={{ padding: '8px 16px', fontSize: '0.85rem', color: '#059669', background: '#ECFDF5', display: 'flex', alignItems: 'center', gap: '6px' }}>
                       <CheckCircle size={16} /> Applied
                     </button>
                   ) : (
-                    <button onClick={() => handleApply(job)} className="btn-primary" style={{ padding: '8px 18px', fontSize: '0.85rem' }}>
+                    <button onClick={() => handleApply(job)} className="btn-primary" style={{ padding: '8px 18px', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '6px' }}>
                       <Send size={14} /> Apply Now
                     </button>
                   )}

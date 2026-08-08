@@ -52,6 +52,11 @@ public class StudentController {
         return ResponseEntity.ok(studentService.applyForInternship(studentId, internshipId));
     }
 
+    @PostMapping("/{studentId}/apply/{internshipId}")
+    public ResponseEntity<Map<String,Object>> applyDirect(@PathVariable int studentId, @PathVariable int internshipId){
+        return ResponseEntity.ok(studentService.applyForInternship(studentId, internshipId));
+    }
+
     @PutMapping("/applications/{appId}/test-score")
     public ResponseEntity<Map<String,Object>> saveTestScore(@PathVariable int appId, @RequestBody Map<String,Object> body){
         double score = body.containsKey("score") ? ((Number)body.get("score")).doubleValue() : 90.0;
@@ -60,11 +65,11 @@ public class StudentController {
 
     @GetMapping("/{studentId}/notifications")
     public ResponseEntity<List<Map<String,Object>>> getNotifications(@PathVariable int studentId){
-        return ResponseEntity.ok(studentService.getStudentNotifications(studentId));
+        return ResponseEntity.ok(studentService.getNotifications(studentId));
     }
 
     @PutMapping("/notifications/{id}/read")
-    public ResponseEntity<Map<String,Object>> markNotificationRead(@PathVariable int id){
+    public ResponseEntity<Map<String,Object>> markRead(@PathVariable int id){
         return ResponseEntity.ok(studentService.markNotificationRead(id));
     }
 }
