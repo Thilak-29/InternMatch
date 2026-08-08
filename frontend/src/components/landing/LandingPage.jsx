@@ -101,13 +101,13 @@ export default function LandingPage({ apiBaseUrl, onLoginSuccess }) {
       email: regEmail,
       password: regPassword,
       college: regCollege,
-      grad_year: parseInt(regGradYear) || 2026,
-      cgpa: parseFloat(regCgpa) || 8.5,
+      grad_year: parseInt(regGradYear) ,
+      cgpa: parseFloat(regCgpa) || 0.0,
       gender: regGender,
       location: regLocation,
-      resume_file_name: regResume || 'resume.pdf',
-      leetcode: regLeetcode || 'Thilak0329',
-      github: regGithub || 'Thilak-29',
+      resume_file_name: regResume || ' ',
+      leetcode: regLeetcode || '',
+      github: regGithub || ' ',
       year_of_study: regYear,
       degree: regDegree,
       department: regDept
@@ -150,7 +150,7 @@ export default function LandingPage({ apiBaseUrl, onLoginSuccess }) {
             onClick={() => setIsLogin(true)}
             style={{ flex: 1, padding: '10px', borderRadius: '6px', border: 'none', background: isLogin ? '#FFFFFF' : 'transparent', fontWeight: isLogin ? 700 : 500, cursor: 'pointer', color: isLogin ? '#2563EB' : '#64748B', transition: 'all 0.2s ease' }}
           >
-            Sign In (Student / Company / Admin)
+            Sign In 
           </button>
           <button
             onClick={() => setIsLogin(false)}

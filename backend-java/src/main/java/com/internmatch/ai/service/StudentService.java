@@ -12,5 +12,6 @@ public interface StudentService {
     Map<String,Object> applyForInternship(int studentId, int internshipId);
     Map<String,Object> updateTestScore(int appId, double score);
     List<Map<String,Object>> getStudentNotifications(int studentId);
+    List<Map<String,Object>> getNotifications(int studentId);
     Map<String,Object> markNotificationRead(int id);
 }
