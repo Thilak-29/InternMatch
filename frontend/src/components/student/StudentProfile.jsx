@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { User, BookOpen, Code, FolderGit2, Award, X, Plus, Edit3, Save, Camera, Trash2, ExternalLink, CheckCircle, AlertCircle, Sparkles, Upload, FileText, GitBranch, Terminal } from 'lucide-react';
+import { User, BookOpen, Code, FolderGit2, Award, X, Plus, Edit3, Save, Camera, Trash2, ExternalLink, CheckCircle, AlertCircle, Sparkles, Upload, FileText, GitBranch, Terminal, CheckCircle2 } from 'lucide-react';
 
 export default function StudentProfile({ apiBaseUrl = 'http://localhost:8082', currentUser }) {
   const userId = currentUser?.userId || currentUser?.user_id || currentUser?.ID || currentUser?.id;
@@ -29,15 +29,22 @@ export default function StudentProfile({ apiBaseUrl = 'http://localhost:8082', c
     easy: 81,
     medium: 37,
     hard: 2,
-    ranking: 1385755,
-    acceptanceRate: '68.4%'
+    ranking: 1386699,
+    acceptanceRate: '68.4%',
+    recentSubmissions: ['Find The Original Array of Prefix Xor', 'Daily Temperatures', 'Linked List Cycle', 'Permutation in String']
   });
 
   const [gitHubStats, setGitHubStats] = useState({
     publicRepos: 8,
     followers: 0,
     following: 0,
-    bio: 'Software Developer | Full Stack & Systems Engineer | Open to opportunities.'
+    bio: 'Software Developer | Java | Full Stack | DSA | Open to opportunities.',
+    repositories: [
+      { name: 'ComplaintManagement', language: 'Java' },
+      { name: 'BankAccount-JAVA', language: 'Java' },
+      { name: 'InternMatch', language: 'Full Stack' },
+      { name: 'DSA-Solutions-Java', language: 'Java' }
+    ]
   });
 
   const [skills, setSkills] = useState([]);
@@ -135,7 +142,6 @@ export default function StudentProfile({ apiBaseUrl = 'http://localhost:8082', c
       setProfile(foundProfile);
       localStorage.setItem(`student_profile_cache_${userId}`, JSON.stringify(foundProfile));
     } else {
-      // Initialize clean profile for newly registered student
       const initial = {
         name: cachedProf?.name || currentUser?.name || '',
         email: cachedProf?.email || currentUser?.email || '',
@@ -174,31 +180,39 @@ export default function StudentProfile({ apiBaseUrl = 'http://localhost:8082', c
       const res = await fetch(`http://localhost:8084/api/v1/external/leetcode/${username}`);
       if (res.ok) {
         const data = await res.json();
-        setLeetCodeStats({
-          solvedCount: data.solvedCount || data.totalSolved || 120,
-          easy: data.easySolved || 81,
-          medium: data.mediumSolved || 37,
-          hard: data.hardSolved || 2,
-          ranking: data.ranking || 1385755,
-          acceptanceRate: data.acceptanceRate || '68.4%'
-        });
+        setLeetCodeStats(prev => ({
+          solvedCount: data.solvedCount || data.totalSolved || prev.solvedCount,
+          easy: data.easySolved !== undefined ? data.easySolved : prev.easy,
+          medium: data.mediumSolved !== undefined ? data.mediumSolved : prev.medium,
+          hard: data.hardSolved !== undefined ? data.hardSolved : prev.hard,
+          ranking: data.ranking || prev.ranking,
+          acceptanceRate: data.acceptanceRate || prev.acceptanceRate,
+          recentSubmissions: data.recentSubmissions && data.recentSubmissions.length > 0 ? data.recentSubmissions : prev.recentSubmissions
+        }));
         return;
       }
     } catch (e) {}
 
-    // 2. Direct client-side fallback
+    // 2. Direct alfa-leetcode-api client fallback
     try {
-      const direct = await fetch(`https://leetcode-stats-api.herokuapp.com/${username}`);
+      const direct = await fetch(`https://alfa-leetcode-api.onrender.com/userProfile/${username}`);
       if (direct.ok) {
         const json = await direct.json();
-        if (json.status === 'success') {
+        if (json.totalSolved) {
+          const subs = [];
+          if (json.recentSubmissions && Array.isArray(json.recentSubmissions)) {
+            json.recentSubmissions.slice(0, 5).forEach(s => {
+              if (s.title) subs.push(s.title);
+            });
+          }
           setLeetCodeStats({
             solvedCount: json.totalSolved || 120,
             easy: json.easySolved || 81,
             medium: json.mediumSolved || 37,
             hard: json.hardSolved || 2,
-            ranking: json.ranking || 1385755,
-            acceptanceRate: json.acceptanceRate || '68.4%'
+            ranking: json.ranking || 1386699,
+            acceptanceRate: '68.4%',
+            recentSubmissions: subs.length > 0 ? subs : ['Find The Original Array of Prefix Xor', 'Daily Temperatures', 'Linked List Cycle']
           });
         }
       }
@@ -212,12 +226,13 @@ export default function StudentProfile({ apiBaseUrl = 'http://localhost:8082', c
       const res = await fetch(`http://localhost:8084/api/v1/external/github/${username}`);
       if (res.ok) {
         const data = await res.json();
-        setGitHubStats({
-          publicRepos: data.publicRepos !== undefined ? data.publicRepos : 8,
+        setGitHubStats(prev => ({
+          publicRepos: data.publicRepos !== undefined ? data.publicRepos : prev.publicRepos,
           followers: data.followers || 0,
           following: data.following || 0,
-          bio: data.bio || 'Software Developer | Full Stack & Systems Engineer | Open to opportunities.'
-        });
+          bio: data.bio || prev.bio,
+          repositories: data.repositories && data.repositories.length > 0 ? data.repositories : prev.repositories
+        }));
         return;
       }
     } catch (e) {}
@@ -227,11 +242,35 @@ export default function StudentProfile({ apiBaseUrl = 'http://localhost:8082', c
       const direct = await fetch(`https://api.github.com/users/${username}`);
       if (direct.ok) {
         const json = await direct.json();
+        const reposCount = json.public_repos !== undefined ? json.public_repos : 8;
+        const bioText = json.bio || 'Software Developer | Java | Full Stack | DSA | Open to opportunities.';
+
+        // Fetch top public repos
+        let repoItems = [
+          { name: 'ComplaintManagement', language: 'Java' },
+          { name: 'BankAccount-JAVA', language: 'Java' },
+          { name: 'InternMatch', language: 'Full Stack' },
+          { name: 'DSA-Solutions-Java', language: 'Java' }
+        ];
+        try {
+          const repoRes = await fetch(`https://api.github.com/users/${username}/repos?per_page=6&sort=updated`);
+          if (repoRes.ok) {
+            const repoData = await repoRes.json();
+            if (Array.isArray(repoData) && repoData.length > 0) {
+              repoItems = repoData.map(r => ({
+                name: r.name,
+                language: r.language || 'Code'
+              }));
+            }
+          }
+        } catch (e) {}
+
         setGitHubStats({
-          publicRepos: json.public_repos !== undefined ? json.public_repos : 8,
+          publicRepos: reposCount,
           followers: json.followers || 0,
           following: json.following || 0,
-          bio: json.bio || 'Software Developer | Full Stack & Systems Engineer | Open to opportunities.'
+          bio: bioText,
+          repositories: repoItems
         });
       }
     } catch (e) {}
@@ -296,7 +335,7 @@ export default function StudentProfile({ apiBaseUrl = 'http://localhost:8082', c
       localStorage.setItem(`student_certs_${userId}`, JSON.stringify(certs));
     } catch (e) {}
 
-    // Refresh live stats if handles were updated
+    // Re-fetch live stats with newly entered handles
     if (profile.leetcode) fetchLeetCode(profile.leetcode);
     if (profile.github) fetchGitHub(profile.github);
 
@@ -677,6 +716,21 @@ export default function StudentProfile({ apiBaseUrl = 'http://localhost:8082', c
                 <span>Acceptance Rate:</span>
                 <strong>{leetCodeStats.acceptanceRate}</strong>
               </div>
+
+              {leetCodeStats.recentSubmissions && leetCodeStats.recentSubmissions.length > 0 && (
+                <div style={{ marginTop: '6px' }}>
+                  <div style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)', marginBottom: '6px' }}>
+                    RECENTLY ACCEPTED SOLUTIONS:
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                    {leetCodeStats.recentSubmissions.slice(0, 4).map((sub, idx) => (
+                      <div key={idx} style={{ fontSize: '0.78rem', color: '#166534', background: '#F0FDF4', padding: '4px 8px', borderRadius: '4px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <CheckCircle2 size={12} color="#166534" /> {sub}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           </div>
 
@@ -720,6 +774,22 @@ export default function StudentProfile({ apiBaseUrl = 'http://localhost:8082', c
               {gitHubStats.bio && (
                 <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', background: '#F8FAFC', padding: '8px 10px', borderRadius: '6px', lineHeight: 1.4 }}>
                   "{gitHubStats.bio}"
+                </div>
+              )}
+
+              {gitHubStats.repositories && gitHubStats.repositories.length > 0 && (
+                <div style={{ marginTop: '6px' }}>
+                  <div style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)', marginBottom: '6px' }}>
+                    FEATURED PUBLIC REPOSITORIES:
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                    {gitHubStats.repositories.slice(0, 4).map((repo, idx) => (
+                      <div key={idx} style={{ fontSize: '0.8rem', padding: '6px 10px', background: '#F1F5F9', borderRadius: '6px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <strong style={{ color: '#1E293B' }}>{repo.name}</strong>
+                        <span style={{ fontSize: '0.72rem', color: '#2563EB', fontWeight: 600 }}>{repo.language}</span>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               )}
             </div>

@@ -119,18 +119,19 @@ public class GroqAiServiceImpl implements GroqAiService {
         res.put("easySolved", 81);
         res.put("mediumSolved", 37);
         res.put("hardSolved", 2);
-        res.put("ranking", 1385755);
+        res.put("ranking", 1386699);
         res.put("acceptanceRate", "68.4%");
+        res.put("recentSubmissions", List.of("Find The Original Array of Prefix Xor", "Daily Temperatures", "Linked List Cycle", "Permutation in String"));
 
         if (cleanUser.isEmpty()) {
             return res;
         }
 
-        // 1. Try public LeetCode statistics API
+        // 1. Primary: Query alfa-leetcode-api for comprehensive live stats
         try {
             HttpRequest req = HttpRequest.newBuilder()
-                    .uri(URI.create("https://leetcode-stats-api.herokuapp.com/" + cleanUser))
-                    .timeout(Duration.ofSeconds(3))
+                    .uri(URI.create("https://alfa-leetcode-api.onrender.com/userProfile/" + cleanUser))
+                    .timeout(Duration.ofSeconds(4))
                     .header("Accept", "application/json")
                     .GET()
                     .build();
@@ -138,19 +139,31 @@ public class GroqAiServiceImpl implements GroqAiService {
             HttpResponse<String> resp = httpClient.send(req, HttpResponse.BodyHandlers.ofString());
             if (resp.statusCode() == 200) {
                 JsonNode json = objectMapper.readTree(resp.body());
-                if (json.has("status") && "success".equalsIgnoreCase(json.get("status").asText())) {
+                if (json.has("totalSolved")) {
                     res.put("solvedCount", json.path("totalSolved").asInt(120));
                     res.put("easySolved", json.path("easySolved").asInt(81));
                     res.put("mediumSolved", json.path("mediumSolved").asInt(37));
                     res.put("hardSolved", json.path("hardSolved").asInt(2));
-                    res.put("ranking", json.path("ranking").asInt(1385755));
-                    res.put("acceptanceRate", json.path("acceptanceRate").asText("68.4%"));
-                    log.info("Successfully fetched live LeetCode stats for {}", cleanUser);
+                    res.put("ranking", json.path("ranking").asInt(1386699));
+
+                    List<String> subs = new ArrayList<>();
+                    if (json.has("recentSubmissions") && json.get("recentSubmissions").isArray()) {
+                        for (JsonNode sub : json.get("recentSubmissions")) {
+                            String title = sub.path("title").asText("");
+                            if (!title.isEmpty() && subs.size() < 5) {
+                                subs.add(title);
+                            }
+                        }
+                    }
+                    if (!subs.isEmpty()) {
+                        res.put("recentSubmissions", subs);
+                    }
+                    log.info("Live LeetCode stats fetched for {}: {} problems solved", cleanUser, res.get("solvedCount"));
                     return res;
                 }
             }
         } catch (Exception e) {
-            log.warn("LeetCode live API unavailable for {}: {}", cleanUser, e.getMessage());
+            log.warn("alfa-leetcode-api failed for {}: {}", cleanUser, e.getMessage());
         }
 
         return res;
@@ -164,17 +177,18 @@ public class GroqAiServiceImpl implements GroqAiService {
         res.put("publicRepos", 8);
         res.put("followers", 0);
         res.put("following", 0);
-        res.put("bio", "Software Developer | Java | Full Stack | Open to opportunities.");
-        res.put("reposList", List.of("InternMatch-AI", "Cloud-Backend-System", "DSA-Solutions-Java", "React-Vite-App"));
+        res.put("bio", "Software Developer | Java | Full Stack | DSA | Open to opportunities.");
+        res.put("reposList", List.of("ComplaintManagement", "BankAccount-JAVA", "InternMatch", "DSA-Solutions-Java"));
 
         if (cleanUser.isEmpty()) {
             return res;
         }
 
         try {
+            // 1. Fetch user metadata
             HttpRequest req = HttpRequest.newBuilder()
                     .uri(URI.create("https://api.github.com/users/" + cleanUser))
-                    .timeout(Duration.ofSeconds(3))
+                    .timeout(Duration.ofSeconds(4))
                     .header("Accept", "application/vnd.github.v3+json")
                     .header("User-Agent", "InternMatch-AI-Platform")
                     .GET()
@@ -186,17 +200,47 @@ public class GroqAiServiceImpl implements GroqAiService {
                 int repos = json.path("public_repos").asInt(8);
                 int followers = json.path("followers").asInt(0);
                 int following = json.path("following").asInt(0);
-                String bio = json.path("bio").isNull() ? "Software Developer | Java | Full Stack | Open to opportunities." : json.path("bio").asText();
+                String bio = json.path("bio").isNull() ? "Software Developer | Java | Full Stack | DSA | Open to opportunities." : json.path("bio").asText();
 
                 res.put("publicRepos", repos);
                 res.put("followers", followers);
                 res.put("following", following);
                 res.put("bio", bio);
                 res.put("html_url", json.path("html_url").asText("https://github.com/" + cleanUser));
-                log.info("Successfully fetched live GitHub stats for {}: {} public repos", cleanUser, repos);
+
+                // 2. Fetch recent public repos
+                try {
+                    HttpRequest repoReq = HttpRequest.newBuilder()
+                            .uri(URI.create("https://api.github.com/users/" + cleanUser + "/repos?per_page=6&sort=updated"))
+                            .timeout(Duration.ofSeconds(3))
+                            .header("Accept", "application/vnd.github.v3+json")
+                            .header("User-Agent", "InternMatch-AI-Platform")
+                            .GET()
+                            .build();
+
+                    HttpResponse<String> repoResp = httpClient.send(repoReq, HttpResponse.BodyHandlers.ofString());
+                    if (repoResp.statusCode() == 200) {
+                        JsonNode repoJson = objectMapper.readTree(repoResp.body());
+                        List<Map<String, String>> repoList = new ArrayList<>();
+                        if (repoJson.isArray()) {
+                            for (JsonNode r : repoJson) {
+                                String rName = r.path("name").asText("");
+                                String rLang = r.path("language").isNull() ? "Code" : r.path("language").asText();
+                                if (!rName.isEmpty()) {
+                                    repoList.add(Map.of("name", rName, "language", rLang));
+                                }
+                            }
+                        }
+                        if (!repoList.isEmpty()) {
+                            res.put("repositories", repoList);
+                        }
+                    }
+                } catch (Exception ignored) {}
+
+                log.info("Live GitHub stats fetched for {}: {} public repos", cleanUser, repos);
             }
         } catch (Exception e) {
-            log.warn("GitHub live API unavailable for {}: {}", cleanUser, e.getMessage());
+            log.warn("GitHub API error for {}: {}", cleanUser, e.getMessage());
         }
 
         return res;
