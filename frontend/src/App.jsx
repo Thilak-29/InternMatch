@@ -27,7 +27,10 @@ export default function App() {
     return localStorage.getItem('internmatch_tab') || 'dashboard';
   });
 
-  const API_BASE_URL = API_CONFIG.getUrl('GATEWAY');
+  const AUTH_URL = API_CONFIG.AUTH_SERVICE_URL;
+  const STUDENT_URL = API_CONFIG.STUDENT_SERVICE_URL;
+  const COMPANY_URL = API_CONFIG.COMPANY_SERVICE_URL;
+  const AI_URL = API_CONFIG.AI_SERVICE_URL;
 
   const setActiveTab = (tab) => {
     setActiveTabState(tab);
@@ -48,43 +51,43 @@ export default function App() {
   };
 
   if (!currentUser) {
-    return <LandingPage apiBaseUrl={API_BASE_URL} onLoginSuccess={handleLoginSuccess} />;
+    return <LandingPage apiBaseUrl={AUTH_URL} onLoginSuccess={handleLoginSuccess} />;
   }
 
   const role = (currentUser?.role || 'STUDENT').toUpperCase();
 
   const renderContent = () => {
     if (role === 'ADMIN') {
-      return <AdminDashboard apiBaseUrl={API_BASE_URL} currentUser={currentUser} />;
+      return <AdminDashboard apiBaseUrl={AUTH_URL} currentUser={currentUser} />;
     }
 
     if (role === 'COMPANY') {
       switch (activeTab) {
         case 'dashboard':
-          return <CompanyDashboard apiBaseUrl={API_BASE_URL} currentUser={currentUser} />;
+          return <CompanyDashboard apiBaseUrl={COMPANY_URL} currentUser={currentUser} onNavigate={setActiveTab} />;
         case 'post':
         case 'post-internship':
-          return <PostInternship apiBaseUrl={API_BASE_URL} currentUser={currentUser} />;
+          return <PostInternship apiBaseUrl={COMPANY_URL} currentUser={currentUser} onNavigate={setActiveTab} />;
         case 'applicants':
         case 'view-applicants':
-          return <ViewApplicants apiBaseUrl={API_BASE_URL} currentUser={currentUser} />;
+          return <ViewApplicants apiBaseUrl={COMPANY_URL} currentUser={currentUser} />;
         default:
-          return <CompanyDashboard apiBaseUrl={API_BASE_URL} currentUser={currentUser} />;
+          return <CompanyDashboard apiBaseUrl={COMPANY_URL} currentUser={currentUser} onNavigate={setActiveTab} />;
       }
     }
 
     // Default: STUDENT
     switch (activeTab) {
       case 'dashboard':
-        return <StudentDashboard apiBaseUrl={API_BASE_URL} currentUser={currentUser} />;
+        return <StudentDashboard apiBaseUrl={STUDENT_URL} currentUser={currentUser} onNavigate={setActiveTab} />;
       case 'explore':
-        return <ExploreInternships apiBaseUrl={API_BASE_URL} currentUser={currentUser} />;
+        return <ExploreInternships apiBaseUrl={COMPANY_URL} currentUser={currentUser} />;
       case 'applications':
-        return <StudentApplications apiBaseUrl={API_BASE_URL} currentUser={currentUser} />;
+        return <StudentApplications apiBaseUrl={STUDENT_URL} currentUser={currentUser} />;
       case 'profile':
-        return <StudentProfile apiBaseUrl={API_BASE_URL} currentUser={currentUser} />;
+        return <StudentProfile apiBaseUrl={STUDENT_URL} currentUser={currentUser} />;
       default:
-        return <StudentDashboard apiBaseUrl={API_BASE_URL} currentUser={currentUser} />;
+        return <StudentDashboard apiBaseUrl={STUDENT_URL} currentUser={currentUser} onNavigate={setActiveTab} />;
     }
   };
 
@@ -102,7 +105,7 @@ export default function App() {
         {renderContent()}
       </main>
 
-      <AIChatAssistant apiBaseUrl={API_BASE_URL} />
+      <AIChatAssistant apiBaseUrl={AI_URL} />
     </div>
   );
 }
