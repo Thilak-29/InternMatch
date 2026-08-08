@@ -67,7 +67,17 @@ public class AuthServiceImpl implements AuthService {
         Map<String, Object> user = rows.get(0);
         Object userId = user.get("id") != null ? user.get("id") : user.get("ID");
         String username = (String) (user.get("username") != null ? user.get("username") : user.get("USERNAME"));
-        String role = (String) (user.get("role") != null ? user.get("role") : user.get("ROLE"));
+        String role = (String) (user.get("role") != null ? user.get("role") : (user.get("ROLE") != null ? user.get("ROLE") : "STUDENT"));
+        String name = (String) (user.get("name") != null ? user.get("name") : user.get("NAME"));
+        String email = (String) (user.get("email") != null ? user.get("email") : user.get("EMAIL"));
+
+        if (username == null || username.isEmpty()) {
+            username = email != null && email.contains("@") ? email.split("@")[0] : "user";
+        }
+        if (name == null || name.isEmpty()) {
+            name = username;
+        }
+
         String token = "Bearer " + jwtUtil.generateToken(username, role);
 
         Map<String, Object> resp = new HashMap<>();
@@ -76,8 +86,8 @@ public class AuthServiceImpl implements AuthService {
         resp.put("userId", userId);
         resp.put("user_id", userId);
         resp.put("username", username);
-        resp.put("name", user.get("name") != null ? user.get("name") : user.get("NAME"));
-        resp.put("email", user.get("email") != null ? user.get("email") : user.get("EMAIL"));
+        resp.put("name", name);
+        resp.put("email", email);
         resp.put("role", role);
         return resp;
     }
@@ -101,7 +111,7 @@ public class AuthServiceImpl implements AuthService {
             String industry = (String) data.getOrDefault("industry", "Software & IT Solutions");
             String website = (String) data.getOrDefault("website", "https://company.example.com");
             String location = (String) data.getOrDefault("location", "Bengaluru, India");
-            String description = (String) data.getOrDefault("description", "Leading enterprise technology partner.");
+            String description = (String) data.getOrDefault("description", "Leading enterprise technology & hiring partner.");
 
             userRepository.saveUser(username, companyName, email, password, "COMPANY");
             List<Map<String, Object>> rows = userRepository.findByUsernameOrEmail(username);
