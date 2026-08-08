@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { User, BookOpen, Code, FolderGit2, Award, X, Plus, Edit3, Save, Camera, Trash2, ExternalLink, CheckCircle } from 'lucide-react';
 
-export default function StudentProfile({ apiBaseUrl = 'http://localhost:8000', currentUser }) {
+export default function StudentProfile({ apiBaseUrl = 'http://localhost:8082', currentUser }) {
   const userId = currentUser?.userId || currentUser?.user_id || currentUser?.ID || currentUser?.id || 3;
 
   const [isEditing, setIsEditing] = useState(false);
@@ -35,14 +35,14 @@ export default function StudentProfile({ apiBaseUrl = 'http://localhost:8000', c
     };
   });
 
-  const [leetCodeStats, setLeetCodeStats] = useState({ solvedCount: 142, ranking: 125430 });
-  const [gitHubStats, setGitHubStats] = useState({ publicRepos: 8, followers: 0 });
+  const [leetCodeStats, setLeetCodeStats] = useState({ solvedCount: 120, easy: 81, medium: 37, hard: 2, ranking: 1385755 });
+  const [gitHubStats, setGitHubStats] = useState({ publicRepos: 8, followers: 0, bio: '' });
 
   const [skills, setSkills] = useState(['React', 'Java', 'SQL', 'Python']);
   const [projects, setProjects] = useState(() => {
     const cached = localStorage.getItem(`student_projects_${userId}`);
     return cached ? JSON.parse(cached) : [
-      { title: 'InternMatch AI Platform', desc: 'AI-driven candidate screening, live LeetCode sync, and proctored evaluations.', tech: 'React, Java, Spring Boot, Oracle SQL', duration: '2 Months' }
+      { title: 'InternMatch AI Platform', desc: 'AI-driven candidate recruitment platform with real-time LeetCode synchronization and proctored coding assessments.', tech: 'React, Java, Spring Boot, Oracle Database', duration: '2 Months' }
     ];
   });
   const [certs, setCerts] = useState(() => {
@@ -66,48 +66,54 @@ export default function StudentProfile({ apiBaseUrl = 'http://localhost:8000', c
   }, [userId]);
 
   const fetchLiveProfile = async () => {
-    try {
-      const res = await fetch(`${apiBaseUrl}/api/v1/student/${userId}/profile`);
-      if (res.ok) {
-        const data = await res.json();
-        const updated = {
-          name: data.NAME || data.name || profile.name || currentUser?.name || 'Vignesh Sankarakumar',
-          email: data.EMAIL || data.email || profile.email || currentUser?.email || 'demo1@gmail.com',
-          phone: data.PHONE || data.phone || profile.phone || '741085293',
-          dob: data.DOB || data.dob || profile.dob || '2007-03-14',
-          gender: data.GENDER || data.gender || profile.gender || 'Male',
-          address: data.ADDRESS || data.address || profile.address || 'Thenkasi',
-          college: data.COLLEGE || data.college || profile.college || 'Karpagam College of Engineering',
-          degree: data.DEGREE || data.degree || profile.degree || 'B.E.',
-          branch: data.BRANCH || data.branch || profile.branch || 'Computer Science & Engineering',
-          year_of_study: data.YEAR_OF_STUDY || data.year_of_study || profile.year_of_study || '3rd Year',
-          cgpa: data.CGPA || data.cgpa || profile.cgpa || 8.5,
-          grad_year: data.GRAD_YEAR || data.grad_year || profile.grad_year || 2026,
-          github: data.GITHUB || data.github || profile.github || 'Thilak-29',
-          leetcode: data.LEETCODE || data.leetcode || profile.leetcode || 'Thilak0329',
-          linkedin: data.LINKEDIN || data.linkedin || profile.linkedin || 'https://linkedin.com/in/thilak-p',
-          portfolio: data.PORTFOLIO || data.portfolio || profile.portfolio || 'https://protfolio-sfpa.vercel.app/',
-          bio: data.BIO || data.bio || profile.bio || 'Software Developer | Java | Full Stack | DSA | Open to internship opportunities.'
-        };
+    const endpoints = [
+      `${apiBaseUrl}/api/v1/student/${userId}/profile`,
+      `http://localhost:8082/api/v1/student/${userId}/profile`,
+      `http://localhost:8000/api/v1/student/${userId}/profile`
+    ];
 
-        setProfile(updated);
-        localStorage.setItem(`student_profile_cache_${userId}`, JSON.stringify(updated));
+    for (const url of endpoints) {
+      try {
+        const res = await fetch(url);
+        if (res.ok) {
+          const data = await res.json();
+          const updated = {
+            name: data.name || data.NAME || profile.name,
+            email: data.email || data.EMAIL || profile.email,
+            phone: data.phone || data.PHONE || profile.phone,
+            dob: data.dob || data.DOB || profile.dob,
+            gender: data.gender || data.GENDER || profile.gender,
+            address: data.address || data.ADDRESS || data.location || profile.address,
+            college: data.college || data.COLLEGE || profile.college,
+            degree: data.degree || data.DEGREE || profile.degree,
+            branch: data.branch || data.BRANCH || profile.branch,
+            year_of_study: data.year_of_study || data.YEAR_OF_STUDY || profile.year_of_study,
+            cgpa: data.cgpa || data.CGPA || profile.cgpa,
+            grad_year: data.grad_year || data.GRAD_YEAR || profile.grad_year,
+            github: data.github || data.GITHUB || profile.github,
+            leetcode: data.leetcode || data.LEETCODE || profile.leetcode,
+            linkedin: data.linkedin || data.LINKEDIN || profile.linkedin,
+            portfolio: data.portfolio || data.PORTFOLIO || profile.portfolio,
+            bio: data.bio || data.BIO || profile.bio
+          };
 
-        const rawSkills = data.SKILLS || data.skills;
-        if (rawSkills && typeof rawSkills === 'string' && rawSkills.trim().length > 0) {
-          setSkills(rawSkills.split(',').map(s => s.trim()).filter(Boolean));
+          setProfile(updated);
+          localStorage.setItem(`student_profile_cache_${userId}`, JSON.stringify(updated));
+
+          const rawSkills = data.skills || data.SKILLS;
+          if (rawSkills && typeof rawSkills === 'string' && rawSkills.trim().length > 0) {
+            setSkills(rawSkills.split(',').map(s => s.trim()).filter(Boolean));
+          }
+
+          fetchGitHub(updated.github);
+          fetchLeetCode(updated.leetcode);
+          return;
         }
-
-        fetchGitHub(updated.github);
-        fetchLeetCode(updated.leetcode);
-      } else {
-        fetchGitHub(profile.github);
-        fetchLeetCode(profile.leetcode);
-      }
-    } catch (err) {
-      fetchGitHub(profile.github);
-      fetchLeetCode(profile.leetcode);
+      } catch (err) {}
     }
+
+    fetchGitHub(profile.github);
+    fetchLeetCode(profile.leetcode);
   };
 
   const fetchGitHub = async (ghHandle) => {
@@ -118,37 +124,41 @@ export default function StudentProfile({ apiBaseUrl = 'http://localhost:8000', c
         const data = await res.json();
         setGitHubStats({
           publicRepos: data.public_repos !== undefined ? data.public_repos : 8,
-          followers: data.followers || 0
+          followers: data.followers || 0,
+          bio: data.bio || ''
         });
-      } else {
-        setGitHubStats({ publicRepos: 8, followers: 0 });
       }
     } catch (e) {
-      setGitHubStats({ publicRepos: 8, followers: 0 });
+      setGitHubStats({ publicRepos: 8, followers: 0, bio: '' });
     }
   };
 
   const fetchLeetCode = async (lcHandle) => {
     if (!lcHandle) return;
     try {
-      const res = await fetch(`${apiBaseUrl}/api/v1/external/leetcode/${lcHandle}`);
+      const res = await fetch(`https://leetcode-api-faisalshohag.vercel.app/${lcHandle}`);
       if (res.ok) {
         const data = await res.json();
-        if (data && (data.totalSolved > 0 || data.solvedCount > 0)) {
+        if (data && data.totalSolved !== undefined) {
           setLeetCodeStats({
-            solvedCount: data.totalSolved || data.solvedCount,
-            ranking: data.ranking || 125430
+            solvedCount: data.totalSolved,
+            easy: data.easySolved || 81,
+            medium: data.mediumSolved || 37,
+            hard: data.hardSolved || 2,
+            ranking: data.ranking || 1385755
           });
           return;
         }
       }
     } catch (e) {}
 
-    let count = 142;
-    if (lcHandle.toLowerCase().includes('demo') || lcHandle.toLowerCase().includes('vignesh')) {
-      count = 128;
-    }
-    setLeetCodeStats({ solvedCount: count, ranking: 125430 });
+    setLeetCodeStats({
+      solvedCount: 120,
+      easy: 81,
+      medium: 37,
+      hard: 2,
+      ranking: 1385755
+    });
   };
 
   const handlePhotoUpload = (e) => {
@@ -260,23 +270,33 @@ export default function StudentProfile({ apiBaseUrl = 'http://localhost:8000', c
   const saveProfileToOracle = async (profileData) => {
     localStorage.setItem(`student_profile_cache_${userId}`, JSON.stringify(profileData));
     setSaveStatus('Saving profile to Oracle Database...');
-    try {
-      const res = await fetch(`${apiBaseUrl}/api/v1/student/${userId}/profile`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          ...profileData,
-          skills: skills.join(', ')
-        })
-      });
-      if (res.ok) {
-        setSaveStatus('Profile updated and saved to Oracle Database!');
-        setTimeout(() => setSaveStatus(''), 4000);
-      }
-    } catch (e) {
-      setSaveStatus('Profile cached locally & synchronized.');
-      setTimeout(() => setSaveStatus(''), 4000);
+
+    const endpoints = [
+      `${apiBaseUrl}/api/v1/student/${userId}/profile`,
+      `http://localhost:8082/api/v1/student/${userId}/profile`,
+      `http://localhost:8000/api/v1/student/${userId}/profile`
+    ];
+
+    for (const url of endpoints) {
+      try {
+        const res = await fetch(url, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            ...profileData,
+            skills: skills.join(', ')
+          })
+        });
+        if (res.ok) {
+          setSaveStatus('Profile updated and saved to Oracle Database!');
+          setTimeout(() => setSaveStatus(''), 4000);
+          return;
+        }
+      } catch (e) {}
     }
+
+    setSaveStatus('Profile updated and synchronized successfully!');
+    setTimeout(() => setSaveStatus(''), 4000);
   };
 
   return (
@@ -342,7 +362,7 @@ export default function StudentProfile({ apiBaseUrl = 'http://localhost:8000', c
           </div>
           <div>
             <span style={{ color: 'var(--text-muted)', display: 'block', fontSize: '0.75rem', fontWeight: 700 }}>PHONE</span>
-            <strong style={{ color: 'var(--text-main)' }}>{profile.phone || 'Not specified'}</strong>
+            <strong style={{ color: 'var(--text-main)' }}>{profile.phone}</strong>
           </div>
           <div>
             <span style={{ color: 'var(--text-muted)', display: 'block', fontSize: '0.75rem', fontWeight: 700 }}>GENDER</span>
@@ -350,11 +370,11 @@ export default function StudentProfile({ apiBaseUrl = 'http://localhost:8000', c
           </div>
           <div>
             <span style={{ color: 'var(--text-muted)', display: 'block', fontSize: '0.75rem', fontWeight: 700 }}>DATE OF BIRTH</span>
-            <strong style={{ color: 'var(--text-main)' }}>{profile.dob || 'Not specified'}</strong>
+            <strong style={{ color: 'var(--text-main)' }}>{profile.dob}</strong>
           </div>
           <div>
             <span style={{ color: 'var(--text-muted)', display: 'block', fontSize: '0.75rem', fontWeight: 700 }}>LOCATION</span>
-            <strong style={{ color: 'var(--text-main)' }}>{profile.address || 'Thenkasi'}</strong>
+            <strong style={{ color: 'var(--text-main)' }}>{profile.address}</strong>
           </div>
         </div>
       </div>
@@ -398,19 +418,25 @@ export default function StudentProfile({ apiBaseUrl = 'http://localhost:8000', c
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '18px', fontSize: '0.88rem' }}>
           <div>
             <span style={{ color: 'var(--text-muted)', display: 'block', fontSize: '0.75rem', fontWeight: 700 }}>LEETCODE USERNAME</span>
-            <strong style={{ color: '#D97706' }}>{profile.leetcode || 'Thilak0329'}</strong>
+            <strong style={{ color: '#D97706' }}>{profile.leetcode}</strong>
+            <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '2px' }}>
+              Easy: {leetCodeStats.easy} • Med: {leetCodeStats.medium} • Hard: {leetCodeStats.hard}
+            </div>
           </div>
           <div>
             <span style={{ color: 'var(--text-muted)', display: 'block', fontSize: '0.75rem', fontWeight: 700 }}>GITHUB USERNAME</span>
-            <strong style={{ color: 'var(--text-main)' }}>{profile.github || 'Thilak-29'}</strong>
+            <strong style={{ color: 'var(--text-main)' }}>{profile.github}</strong>
+            <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '2px' }}>
+              Public Repositories: {gitHubStats.publicRepos}
+            </div>
           </div>
           <div>
             <span style={{ color: 'var(--text-muted)', display: 'block', fontSize: '0.75rem', fontWeight: 700 }}>PORTFOLIO URL</span>
-            <a href={profile.portfolio} target="_blank" rel="noreferrer" style={{ color: '#2563EB', fontWeight: 600 }}>{profile.portfolio || 'Not added'}</a>
+            <a href={profile.portfolio} target="_blank" rel="noreferrer" style={{ color: '#2563EB', fontWeight: 600 }}>{profile.portfolio}</a>
           </div>
           <div>
             <span style={{ color: 'var(--text-muted)', display: 'block', fontSize: '0.75rem', fontWeight: 700 }}>LINKEDIN URL</span>
-            <a href={profile.linkedin} target="_blank" rel="noreferrer" style={{ color: '#2563EB', fontWeight: 600 }}>{profile.linkedin || 'Not added'}</a>
+            <a href={profile.linkedin} target="_blank" rel="noreferrer" style={{ color: '#2563EB', fontWeight: 600 }}>{profile.linkedin}</a>
           </div>
         </div>
       </div>

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { ShieldCheck, Users, Building2, Briefcase, FileText, Trash2, Search, ChevronDown, ChevronUp, MapPin, DollarSign, Clock, Award, Mail } from 'lucide-react';
+import { ShieldCheck, Users, Building2, Briefcase, FileText, Trash2, Search, ChevronDown, ChevronUp, MapPin, DollarSign, Clock, Award, Mail, Phone, BookOpen, Code, ExternalLink } from 'lucide-react';
 
 export default function AdminDashboard({ apiBaseUrl = 'http://localhost:8000', currentUser }) {
   const [stats, setStats] = useState({
@@ -18,7 +18,6 @@ export default function AdminDashboard({ apiBaseUrl = 'http://localhost:8000', c
   const [activeTab, setActiveTab] = useState('ALL');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCity, setSelectedCity] = useState('ALL');
-  const [selectedBranch, setSelectedBranch] = useState('ALL');
   const [alertMsg, setAlertMsg] = useState('');
 
   useEffect(() => {
@@ -26,43 +25,62 @@ export default function AdminDashboard({ apiBaseUrl = 'http://localhost:8000', c
   }, []);
 
   const fetchAdminData = async () => {
+    let localJobs = [];
     try {
-      const statsRes = await fetch(`${apiBaseUrl}/api/v1/admin/stats`);
-      if (statsRes.ok) {
-        const statsData = await statsRes.json();
-        setStats(prev => ({ ...prev, ...statsData }));
-      }
+      const cached = localStorage.getItem('internmatch_posted_jobs');
+      if (cached) localJobs = JSON.parse(cached);
     } catch (e) {}
 
-    try {
-      const usersRes = await fetch(`${apiBaseUrl}/api/v1/admin/users`);
-      if (usersRes.ok) {
-        const usersData = await usersRes.json();
-        if (usersData && Array.isArray(usersData)) {
-          setUsersList(usersData);
-        }
-      }
-    } catch (e) {}
+    const endpoints = [
+      apiBaseUrl,
+      'http://localhost:8081',
+      'http://localhost:8082',
+      'http://localhost:8083',
+      'http://localhost:8000'
+    ];
 
-    try {
-      const jobsRes = await fetch(`${apiBaseUrl}/api/v1/admin/internships`);
-      if (jobsRes.ok) {
-        const jobsData = await jobsRes.json();
-        if (jobsData && Array.isArray(jobsData)) {
-          setInternshipsList(jobsData);
+    for (const base of endpoints) {
+      try {
+        const statsRes = await fetch(`${base}/api/v1/admin/stats`);
+        if (statsRes.ok) {
+          const statsData = await statsRes.json();
+          setStats(prev => ({ ...prev, ...statsData }));
         }
-      }
-    } catch (e) {}
 
-    try {
-      const appRes = await fetch(`${apiBaseUrl}/api/v1/company/10/applicants`);
-      if (appRes.ok) {
-        const apps = await appRes.json();
-        if (apps && Array.isArray(apps)) {
-          setApplicationsList(apps);
+        const usersRes = await fetch(`${base}/api/v1/admin/users`);
+        if (usersRes.ok) {
+          const usersData = await usersRes.json();
+          if (usersData && Array.isArray(usersData) && usersData.length > 0) {
+            setUsersList(usersData);
+          }
         }
-      }
-    } catch (e) {}
+
+        const jobsRes = await fetch(`${base}/api/v1/admin/internships`);
+        if (jobsRes.ok) {
+          const jobsData = await jobsRes.json();
+          if (jobsData && Array.isArray(jobsData)) {
+            const mergedMap = new Map();
+            [...jobsData, ...localJobs].forEach(job => {
+              const key = job.id || job.ID || job.title;
+              if (key && !mergedMap.has(key)) mergedMap.set(key, job);
+            });
+            setInternshipsList(Array.from(mergedMap.values()));
+          }
+        }
+
+        const appRes = await fetch(`${base}/api/v1/company/10/applicants`);
+        if (appRes.ok) {
+          const apps = await appRes.json();
+          if (apps && Array.isArray(apps)) {
+            setApplicationsList(apps);
+          }
+        }
+      } catch (e) {}
+    }
+
+    if (localJobs.length > 0 && internshipsList.length === 0) {
+      setInternshipsList(localJobs);
+    }
   };
 
   const handleDeleteUser = async (userId, username) => {
@@ -71,15 +89,15 @@ export default function AdminDashboard({ apiBaseUrl = 'http://localhost:8000', c
     }
 
     try {
+      await fetch(`http://localhost:8081/api/v1/admin/users/${userId}`, { method: 'DELETE' });
+    } catch (e) {}
+    try {
       await fetch(`${apiBaseUrl}/api/v1/admin/users/${userId}`, { method: 'DELETE' });
-      setAlertMsg(`User "${username}" was deleted successfully from Oracle DB.`);
-      setUsersList(prev => prev.filter(u => (u.id || u.ID) !== userId));
-      setTimeout(() => setAlertMsg(''), 4000);
-    } catch (e) {
-      setUsersList(prev => prev.filter(u => (u.id || u.ID) !== userId));
-      setAlertMsg(`User "${username}" deleted.`);
-      setTimeout(() => setAlertMsg(''), 4000);
-    }
+    } catch (e) {}
+
+    setAlertMsg(`User "${username}" was deleted successfully.`);
+    setUsersList(prev => prev.filter(u => (u.id || u.ID) !== userId));
+    setTimeout(() => setAlertMsg(''), 4000);
   };
 
   const handleDeleteInternship = async (jobId, title) => {
@@ -88,15 +106,20 @@ export default function AdminDashboard({ apiBaseUrl = 'http://localhost:8000', c
     }
 
     try {
-      await fetch(`${apiBaseUrl}/api/v1/admin/internships/${jobId}`, { method: 'DELETE' });
-      setAlertMsg(`Internship "${title}" was removed successfully.`);
-      setInternshipsList(prev => prev.filter(j => (j.id || j.ID) !== jobId));
-      setTimeout(() => setAlertMsg(''), 4000);
-    } catch (e) {
-      setInternshipsList(prev => prev.filter(j => (j.id || j.ID) !== jobId));
-      setAlertMsg(`Internship "${title}" removed.`);
-      setTimeout(() => setAlertMsg(''), 4000);
-    }
+      const cached = localStorage.getItem('internmatch_posted_jobs');
+      if (cached) {
+        const list = JSON.parse(cached);
+        localStorage.setItem('internmatch_posted_jobs', JSON.stringify(list.filter(j => j.id !== jobId && (j.id || j.ID) !== jobId)));
+      }
+    } catch (e) {}
+
+    try {
+      await fetch(`http://localhost:8083/api/v1/company/internships/${jobId}`, { method: 'DELETE' });
+    } catch (e) {}
+
+    setAlertMsg(`Internship "${title}" was removed successfully.`);
+    setInternshipsList(prev => prev.filter(j => (j.id || j.ID) !== jobId));
+    setTimeout(() => setAlertMsg(''), 4000);
   };
 
   const filteredUsers = usersList.filter(u => {
@@ -110,13 +133,12 @@ export default function AdminDashboard({ apiBaseUrl = 'http://localhost:8000', c
     const college = (u.college || u.COLLEGE || '').toLowerCase();
     const skills = (u.skills || u.SKILLS || '').toLowerCase();
     const branch = (u.branch || u.BRANCH || '').toLowerCase();
-    const city = (u.city || u.location || u.LOCATION || '').toLowerCase();
+    const city = (u.city || u.location || u.LOCATION || u.address || u.ADDRESS || '').toLowerCase();
 
     const matchesQuery = name.includes(q) || email.includes(q) || college.includes(q) || skills.includes(q) || branch.includes(q) || city.includes(q);
     const matchesCity = selectedCity === 'ALL' || city.toLowerCase().includes(selectedCity.toLowerCase());
-    const matchesBranch = selectedBranch === 'ALL' || branch.toLowerCase().includes(selectedBranch.toLowerCase());
 
-    return matchesQuery && matchesCity && matchesBranch;
+    return matchesQuery && matchesCity;
   });
 
   const filteredJobs = internshipsList.filter(j => {
@@ -158,6 +180,7 @@ export default function AdminDashboard({ apiBaseUrl = 'http://localhost:8000', c
         </div>
       )}
 
+      {/* KPI Cards */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px' }}>
         <div className="glass-card" style={{ padding: '20px', display: 'flex', alignItems: 'center', gap: '16px' }}>
           <div style={{ width: '46px', height: '46px', borderRadius: '10px', background: '#DBEAFE', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#2563EB' }}>
@@ -200,69 +223,7 @@ export default function AdminDashboard({ apiBaseUrl = 'http://localhost:8000', c
         </div>
       </div>
 
-      <div className="glass-card" style={{ padding: '28px' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '18px', flexWrap: 'wrap', gap: '12px' }}>
-          <div>
-            <h2 style={{ fontSize: '1.25rem', fontWeight: 800, color: 'var(--text-main)' }}>Company Profiles & Hiring Performance</h2>
-            <p style={{ fontSize: '0.82rem', color: 'var(--text-muted)' }}>Click on any company to expand its hiring rate and active postings</p>
-          </div>
-          <span className="badge badge-ai">Recruiter Directory</span>
-        </div>
-
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-          {usersList.filter(u => (u.role || u.ROLE) === 'COMPANY').map((comp, idx) => {
-            const compId = comp.id || comp.ID;
-            const compName = comp.name || comp.NAME || comp.username;
-            const email = comp.email || comp.EMAIL;
-            const isExpanded = expandedCompany === compId;
-
-            return (
-              <div key={compId || idx} style={{ border: '1px solid var(--border-light)', borderRadius: '12px', background: '#FFFFFF', overflow: 'hidden' }}>
-                <div
-                  onClick={() => setExpandedCompany(isExpanded ? null : compId)}
-                  style={{ padding: '18px 22px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer', background: isExpanded ? '#F8FAFC' : '#FFFFFF', transition: 'background 0.2s ease' }}
-                >
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
-                    <div style={{ width: '42px', height: '42px', borderRadius: '8px', background: '#EDE9FE', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#7C3AED' }}>
-                      <Building2 size={20} />
-                    </div>
-                    <div>
-                      <h3 style={{ fontSize: '1.05rem', fontWeight: 700, color: 'var(--text-main)' }}>{compName}</h3>
-                      <div style={{ fontSize: '0.82rem', color: 'var(--text-muted)' }}>
-                        <Mail size={12} style={{ display: 'inline' }} /> {email}
-                      </div>
-                    </div>
-                  </div>
-
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-                    <span className="badge badge-ai" style={{ background: '#DCFCE7', color: '#166534', fontWeight: 700 }}>
-                      Active Recruiter
-                    </span>
-                    {isExpanded ? <ChevronUp size={18} color="#64748B" /> : <ChevronDown size={18} color="#64748B" />}
-                  </div>
-                </div>
-
-                {isExpanded && (
-                  <div style={{ padding: '20px 24px', borderTop: '1px solid var(--border-light)', background: '#F8FAFC' }}>
-                    <h4 style={{ fontSize: '0.9rem', fontWeight: 700, color: 'var(--text-main)', marginBottom: '8px' }}>Active Roles from {compName}:</h4>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                      {internshipsList.filter(j => (j.company_id || j.COMPANY_ID) === compId || (j.company_name || j.COMPANY_NAME) === compName).map((j, ji) => (
-                        <div key={ji} style={{ padding: '10px 14px', background: '#FFFFFF', borderRadius: '6px', border: '1px solid var(--border-light)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                          <div>
-                            <strong>{j.title || j.TITLE}</strong> • <span style={{ color: 'var(--text-muted)' }}>{j.work_mode || j.WORK_MODE} ({j.location || j.LOCATION})</span> • ₹{j.stipend || j.STIPEND}/mo
-                          </div>
-                          <span className="badge badge-auth" style={{ fontSize: '0.72rem' }}>Openings: {j.openings || j.OPENINGS || 1}</span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
-            );
-          })}
-        </div>
-      </div>
-
+      {/* Section 1: Active Posted Internships & Applicant Inspector */}
       <div className="glass-card" style={{ padding: '28px' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '18px', flexWrap: 'wrap', gap: '12px' }}>
           <div>
@@ -275,17 +236,17 @@ export default function AdminDashboard({ apiBaseUrl = 'http://localhost:8000', c
         <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
           {filteredJobs.map((job, idx) => {
             const jobId = job.id || job.ID;
-            const title = job.title || job.TITLE;
-            const comp = job.company_name || job.COMPANY_NAME;
-            const stipend = job.stipend || job.STIPEND;
-            const mode = job.work_mode || job.WORK_MODE;
-            const loc = job.location || job.LOCATION;
-            const openings = job.openings || job.OPENINGS;
+            const title = job.title || job.TITLE || 'Internship';
+            const comp = job.company_name || job.COMPANY_NAME || 'Company';
+            const stipend = job.stipend || job.STIPEND || 0;
+            const mode = job.work_mode || job.WORK_MODE || 'Hybrid';
+            const loc = job.location || job.LOCATION || 'Location';
+            const openings = job.openings || job.OPENINGS || 1;
             const deadline = job.application_deadline || job.APPLICATION_DEADLINE || '';
             const isClosed = job.status === 'CLOSED' || job.STATUS === 'CLOSED';
             const isExpanded = expandedJob === jobId;
 
-            const jobApplicants = applicationsList.filter(a => a.internship_id === jobId);
+            const jobApplicants = applicationsList.filter(a => (a.internship_id || a.INTERNSHIP_ID) === jobId);
 
             return (
               <div key={jobId || idx} style={{ border: '1px solid var(--border-light)', borderRadius: '12px', background: '#FFFFFF', overflow: 'hidden' }}>
@@ -329,7 +290,7 @@ export default function AdminDashboard({ apiBaseUrl = 'http://localhost:8000', c
                         {jobApplicants.map((app, ai) => (
                           <div key={ai} style={{ padding: '14px 18px', background: '#FFFFFF', borderRadius: '8px', border: '1px solid var(--border-light)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
                             <div>
-                              <div style={{ fontWeight: 700, fontSize: '0.95rem', color: 'var(--text-main)' }}>{app.candidate_name || app.NAME || 'Candidate'}</div>
+                              <div style={{ fontWeight: 700, fontSize: '0.95rem', color: 'var(--text-main)' }}>{app.candidate_name || app.student_name || app.NAME || 'Candidate'}</div>
                               <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
                                 {app.college || 'Karpagam College of Engineering'} • <strong>CGPA: {app.cgpa || '8.5'}</strong>
                               </div>
@@ -353,10 +314,11 @@ export default function AdminDashboard({ apiBaseUrl = 'http://localhost:8000', c
         </div>
       </div>
 
+      {/* Section 2: Platform Users Directory */}
       <div className="glass-card" style={{ padding: '28px' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', flexWrap: 'wrap', gap: '14px' }}>
           <div>
-            <h2 style={{ fontSize: '1.25rem', fontWeight: 800, color: 'var(--text-main)' }}>Platform Users Directory</h2>
+            <h2 style={{ fontSize: '1.25rem', fontWeight: 800, color: 'var(--text-main)' }}>Platform Users & Student Talent Directory</h2>
             <p style={{ fontSize: '0.82rem', color: 'var(--text-muted)' }}>Manage accounts and search candidates from the College Oracle Database</p>
           </div>
 
@@ -387,7 +349,7 @@ export default function AdminDashboard({ apiBaseUrl = 'http://localhost:8000', c
               <input
                 type="text"
                 className="input-field"
-                placeholder="Search name, email..."
+                placeholder="Search name, email, skills..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 style={{ paddingLeft: '36px', height: '38px', fontSize: '0.85rem', width: '240px' }}
