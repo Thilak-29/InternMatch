@@ -28,20 +28,29 @@ export default function StudentApplications({ apiBaseUrl = 'http://localhost:808
   const fetchApplications = async () => {
     setIsLoading(true);
 
+    let localApps = [];
+    try {
+      const cached = localStorage.getItem(`student_applications_${studentId}`);
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (Array.isArray(parsed)) localApps = parsed;
+      }
+    } catch (e) {}
+
     const endpoints = [
       `${apiBaseUrl}/api/v1/student/${studentId}/applications`,
       `http://localhost:8082/api/v1/student/${studentId}/applications`,
       `http://localhost:8000/api/v1/student/${studentId}/applications`
     ];
 
-    let foundApps = null;
+    let serverApps = [];
     for (const url of endpoints) {
       try {
         const res = await fetch(url);
         if (res.ok) {
           const data = await res.json();
           if (data && Array.isArray(data)) {
-            foundApps = data;
+            serverApps = data;
             break;
           }
         }
@@ -50,7 +59,23 @@ export default function StudentApplications({ apiBaseUrl = 'http://localhost:808
       }
     }
 
-    setApplications(foundApps || []);
+    const mergedMap = new Map();
+
+    // 1. Add server applications from Oracle DB
+    serverApps.forEach(a => {
+      const key = a.internship_id || a.INTERNSHIP_ID || a.id || a.ID || a.title;
+      if (key) mergedMap.set(key, a);
+    });
+
+    // 2. Merge local confirmed applications
+    localApps.forEach(a => {
+      const key = a.internship_id || a.INTERNSHIP_ID || a.id || a.ID || a.title;
+      if (key && !mergedMap.has(key)) {
+        mergedMap.set(key, a);
+      }
+    });
+
+    setApplications(Array.from(mergedMap.values()));
     setIsLoading(false);
   };
 
@@ -75,7 +100,7 @@ export default function StudentApplications({ apiBaseUrl = 'http://localhost:808
       } catch (e) {}
     }
 
-    setApplications(prev => prev.map(a => {
+    const updatedList = applications.map(a => {
       const aid = a.id || a.ID;
       if (aid === appId) {
         return {
@@ -86,7 +111,12 @@ export default function StudentApplications({ apiBaseUrl = 'http://localhost:808
         };
       }
       return a;
-    }));
+    });
+
+    setApplications(updatedList);
+    try {
+      localStorage.setItem(`student_applications_${studentId}`, JSON.stringify(updatedList));
+    } catch (e) {}
 
     setTestModalApp(null);
   };
@@ -170,7 +200,7 @@ export default function StudentApplications({ apiBaseUrl = 'http://localhost:808
         </div>
       ) : (
         <div className="glass-card" style={{ padding: '48px', textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.95rem' }}>
-          You have not applied to any internships yet. Click 'Explore Internships' to find opportunities.
+          You have not applied to any internships yet. Click 'Explore Internships' to find opportunities and apply.
         </div>
       )}
 

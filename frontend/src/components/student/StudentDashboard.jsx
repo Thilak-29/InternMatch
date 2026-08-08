@@ -37,20 +37,29 @@ export default function StudentDashboard({ apiBaseUrl = 'http://localhost:8082',
   const fetchDashboard = async () => {
     setIsLoading(true);
 
+    let localApps = [];
+    try {
+      const cached = localStorage.getItem(`student_applications_${studentId}`);
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (Array.isArray(parsed)) localApps = parsed;
+      }
+    } catch (e) {}
+
     const endpoints = [
       `${apiBaseUrl}/api/v1/student/${studentId}/applications`,
       `http://localhost:8082/api/v1/student/${studentId}/applications`,
       `http://localhost:8000/api/v1/student/${studentId}/applications`
     ];
 
-    let foundApps = null;
+    let serverApps = [];
     for (const url of endpoints) {
       try {
         const res = await fetch(url);
         if (res.ok) {
           const apps = await res.json();
           if (apps && Array.isArray(apps)) {
-            foundApps = apps;
+            serverApps = apps;
             break;
           }
         }
@@ -59,7 +68,23 @@ export default function StudentDashboard({ apiBaseUrl = 'http://localhost:8082',
       }
     }
 
-    const appsList = foundApps || [];
+    const mergedMap = new Map();
+
+    // 1. Add server applications
+    serverApps.forEach(a => {
+      const key = a.internship_id || a.INTERNSHIP_ID || a.id || a.ID || a.title;
+      if (key) mergedMap.set(key, a);
+    });
+
+    // 2. Merge local confirmed applications
+    localApps.forEach(a => {
+      const key = a.internship_id || a.INTERNSHIP_ID || a.id || a.ID || a.title;
+      if (key && !mergedMap.has(key)) {
+        mergedMap.set(key, a);
+      }
+    });
+
+    const appsList = Array.from(mergedMap.values());
     const passedTests = appsList.filter(a => (a.status || a.STATUS) === 'OFFER_SENT' || (a.status || a.STATUS) === 'TEST_PASSED').length;
     const offersReceived = appsList.filter(a => (a.status || a.STATUS) === 'OFFER_SENT' || (a.status || a.STATUS) === 'HIRED').length;
 
