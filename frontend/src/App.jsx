@@ -1,19 +1,22 @@
 import React, { useState } from 'react';
-import Header from './components/Header';
-import LandingPage from './components/LandingPage';
-import CompanyDashboard from './components/CompanyDashboard';
-import PostInternship from './components/PostInternship';
-import ViewApplicants from './components/ViewApplicants';
-import GenerateTest from './components/GenerateTest';
-import StudentDashboard from './components/StudentDashboard';
-import ExploreInternships from './components/ExploreInternships';
-import StudentProfile from './components/StudentProfile';
-import StudentResume from './components/StudentResume';
-import StudentApplications from './components/StudentApplications';
-import StudentNotifications from './components/StudentNotifications';
-import AdminDashboard from './components/AdminDashboard';
-import ProctoredExamModal from './components/ProctoredExamModal';
-import AIChatAssistant from './components/AIChatAssistant';
+import { API_CONFIG } from './config/apiConfig';
+
+// Domain-Specific Component Imports
+import Header from './components/common/Header';
+import AIChatAssistant from './components/common/AIChatAssistant';
+import LandingPage from './components/landing/LandingPage';
+import StudentDashboard from './components/student/StudentDashboard';
+import ExploreInternships from './components/student/ExploreInternships';
+import StudentProfile from './components/student/StudentProfile';
+import StudentResume from './components/student/StudentResume';
+import StudentApplications from './components/student/StudentApplications';
+import StudentNotifications from './components/student/StudentNotifications';
+import ProctoredExamModal from './components/student/ProctoredExamModal';
+import CompanyDashboard from './components/company/CompanyDashboard';
+import PostInternship from './components/company/PostInternship';
+import ViewApplicants from './components/company/ViewApplicants';
+import GenerateTest from './components/company/GenerateTest';
+import AdminDashboard from './components/admin/AdminDashboard';
 
 export default function App() {
   const [currentUser, setCurrentUser] = useState(() => {
@@ -31,7 +34,7 @@ export default function App() {
   const [showExamModal, setShowExamModal] = useState(false);
   const [activeTestAppId, setActiveTestAppId] = useState(null);
 
-  const API_BASE_URL = 'http://localhost:8000';
+  const API_BASE_URL = API_CONFIG.getUrl('GATEWAY');
 
   const setActiveTab = (tab) => {
     setActiveTabState(tab);
