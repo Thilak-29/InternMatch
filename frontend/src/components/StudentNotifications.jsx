@@ -60,7 +60,7 @@ export default function StudentNotifications({ apiBaseUrl, currentUser }) {
                   boxShadow: isRead ? 'none' : '0 2px 8px rgba(37,99,235,0.06)',
                   opacity: isRead ? 0.75 : 1,
                   display: 'flex',
-                  justify: 'space-between',
+                  justifyContent: 'space-between',
                   alignItems: 'center',
                   cursor: 'pointer',
                   transition: 'all 0.2s ease'
