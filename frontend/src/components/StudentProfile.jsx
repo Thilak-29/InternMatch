@@ -2,39 +2,55 @@ import React, { useState, useEffect } from 'react';
 import { User, BookOpen, Code, FolderGit2, Award, X, Plus, Edit3, Save, Camera, Trash2, ExternalLink } from 'lucide-react';
 
 export default function StudentProfile({ apiBaseUrl = 'http://localhost:8000', currentUser }) {
-  const userId = currentUser?.userId || currentUser?.user_id || 1;
+  const userId = currentUser?.userId || currentUser?.user_id || currentUser?.ID || currentUser?.id || 1;
 
   const [isEditing, setIsEditing] = useState(false);
-  const [profilePhoto, setProfilePhoto] = useState('');
+  const [profilePhoto, setProfilePhoto] = useState(() => {
+    return localStorage.getItem(`profile_photo_${userId}`) || '';
+  });
 
-  const [profile, setProfile] = useState({
-    name: currentUser?.name || '',
-    email: currentUser?.email || '',
-    phone: '',
-    dob: '',
-    gender: '',
-    address: '',
-    college: currentUser?.college || '',
-    degree: currentUser?.degree || '',
-    branch: currentUser?.department || currentUser?.branch || '',
-    year_of_study: currentUser?.year_of_study || '',
-    cgpa: currentUser?.cgpa || '',
-    grad_year: currentUser?.grad_year || '',
-    github: currentUser?.github || '',
-    leetcode: currentUser?.leetcode || '',
-    linkedin: '',
-    portfolio: '',
-    codechef: '',
-    hackerrank: '',
-    bio: ''
+  const [profile, setProfile] = useState(() => {
+    const cached = localStorage.getItem(`student_profile_cache_${userId}`);
+    if (cached) {
+      try { return JSON.parse(cached); } catch (e) {}
+    }
+    return {
+      name: currentUser?.name || currentUser?.NAME || '',
+      email: currentUser?.email || currentUser?.EMAIL || '',
+      phone: '',
+      dob: '',
+      gender: 'Male',
+      address: '',
+      college: currentUser?.college || currentUser?.COLLEGE || 'Karpagam College of Engineering',
+      degree: currentUser?.degree || currentUser?.DEGREE || 'B.E.',
+      branch: currentUser?.department || currentUser?.branch || currentUser?.BRANCH || 'Computer Science & Engineering',
+      year_of_study: currentUser?.year_of_study || currentUser?.YEAR_OF_STUDY || '3rd Year',
+      cgpa: currentUser?.cgpa || currentUser?.CGPA || 8.5,
+      grad_year: currentUser?.grad_year || currentUser?.GRAD_YEAR || 2026,
+      github: currentUser?.github || currentUser?.GITHUB || 'Thilak-29',
+      leetcode: currentUser?.leetcode || currentUser?.LEETCODE || 'Thilak0329',
+      linkedin: '',
+      portfolio: '',
+      codechef: '',
+      hackerrank: '',
+      bio: ''
+    };
   });
 
   const [leetCodeStats, setLeetCodeStats] = useState({ solvedCount: 0, ranking: 0 });
   const [gitHubStats, setGitHubStats] = useState({ publicRepos: 0, followers: 0 });
 
-  const [skills, setSkills] = useState([]);
-  const [projects, setProjects] = useState([]);
-  const [certs, setCerts] = useState([]);
+  const [skills, setSkills] = useState(['React', 'Java', 'SQL', 'Python']);
+  const [projects, setProjects] = useState(() => {
+    const cached = localStorage.getItem(`student_projects_${userId}`);
+    return cached ? JSON.parse(cached) : [
+      { title: 'InternMatch AI Platform', desc: 'AI-driven candidate screening, LeetCode sync, and proctored technical evaluations.', tech: 'React, Java, Spring Boot, Oracle SQL', duration: '2 Months' }
+    ];
+  });
+  const [certs, setCerts] = useState(() => {
+    const cached = localStorage.getItem(`student_certs_${userId}`);
+    return cached ? JSON.parse(cached) : ['Oracle Database SQL Certified Associate', 'AWS Certified Cloud Practitioner'];
+  });
 
   // Form states for adding project and cert
   const [showAddProject, setShowAddProject] = useState(false);
@@ -57,20 +73,36 @@ export default function StudentProfile({ apiBaseUrl = 'http://localhost:8000', c
       const res = await fetch(`${apiBaseUrl}/api/v1/student/${userId}/profile`);
       if (res.ok) {
         const data = await res.json();
-        setProfile(prev => ({
-          ...prev,
-          ...data
-        }));
+        const updated = {
+          name: data.NAME || data.name || profile.name || currentUser?.name || 'Student Candidate',
+          email: data.EMAIL || data.email || profile.email || currentUser?.email || '',
+          phone: data.PHONE || data.phone || profile.phone || '',
+          dob: data.DOB || data.dob || profile.dob || '',
+          gender: data.GENDER || data.gender || profile.gender || 'Male',
+          address: data.ADDRESS || data.address || profile.address || '',
+          college: data.COLLEGE || data.college || profile.college || 'Karpagam College of Engineering',
+          degree: data.DEGREE || data.degree || profile.degree || 'B.E.',
+          branch: data.BRANCH || data.branch || profile.branch || 'Computer Science & Engineering',
+          year_of_study: data.YEAR_OF_STUDY || data.year_of_study || profile.year_of_study || '3rd Year',
+          cgpa: data.CGPA || data.cgpa || profile.cgpa || 8.5,
+          grad_year: data.GRAD_YEAR || data.grad_year || profile.grad_year || 2026,
+          github: data.GITHUB || data.github || profile.github || 'Thilak-29',
+          leetcode: data.LEETCODE || data.leetcode || profile.leetcode || 'Thilak0329',
+          linkedin: data.LINKEDIN || data.linkedin || profile.linkedin || '',
+          portfolio: data.PORTFOLIO || data.portfolio || profile.portfolio || '',
+          bio: data.BIO || data.bio || profile.bio || ''
+        };
 
-        if (data.skills || data.SKILLS) {
-          const rawSkills = data.skills || data.SKILLS;
-          if (typeof rawSkills === 'string' && rawSkills.trim().length > 0) {
-            setSkills(rawSkills.split(',').map(s => s.trim()).filter(Boolean));
-          }
+        setProfile(updated);
+        localStorage.setItem(`student_profile_cache_${userId}`, JSON.stringify(updated));
+
+        const rawSkills = data.SKILLS || data.skills;
+        if (rawSkills && typeof rawSkills === 'string' && rawSkills.trim().length > 0) {
+          setSkills(rawSkills.split(',').map(s => s.trim()).filter(Boolean));
         }
 
-        const lc = data.leetcode || data.LEETCODE;
-        const gh = data.github || data.GITHUB;
+        const lc = updated.leetcode;
+        const gh = updated.github;
         if (lc) fetchLeetCode(lc);
         if (gh) fetchGitHub(gh);
       }
@@ -105,7 +137,8 @@ export default function StudentProfile({ apiBaseUrl = 'http://localhost:8000', c
       const reader = new FileReader();
       reader.onloadend = () => {
         setProfilePhoto(reader.result);
-        setSaveStatus('Profile photo updated!');
+        localStorage.setItem(`profile_photo_${userId}`, reader.result);
+        setSaveStatus('Profile photo updated & saved!');
         setTimeout(() => setSaveStatus(''), 3000);
       };
       reader.readAsDataURL(file);
@@ -160,36 +193,46 @@ export default function StudentProfile({ apiBaseUrl = 'http://localhost:8000', c
       tech: newProjTech,
       duration: newProjDuration || '1 Month'
     };
-    setProjects([...projects, newProj]);
+    const updated = [...projects, newProj];
+    setProjects(updated);
+    localStorage.setItem(`student_projects_${userId}`, JSON.stringify(updated));
     setNewProjTitle('');
     setNewProjDesc('');
     setNewProjTech('');
     setNewProjDuration('');
     setShowAddProject(false);
-    setSaveStatus('Project added successfully!');
+    setSaveStatus('Project saved successfully!');
     setTimeout(() => setSaveStatus(''), 3000);
   };
 
   const handleDeleteProject = (idx) => {
-    setProjects(projects.filter((_, i) => i !== idx));
+    const updated = projects.filter((_, i) => i !== idx);
+    setProjects(updated);
+    localStorage.setItem(`student_projects_${userId}`, JSON.stringify(updated));
   };
 
   const handleAddCert = (e) => {
     e.preventDefault();
     if (!newCertTitle.trim()) return;
-    setCerts([...certs, newCertTitle]);
+    const updated = [...certs, newCertTitle];
+    setCerts(updated);
+    localStorage.setItem(`student_certs_${userId}`, JSON.stringify(updated));
     setNewCertTitle('');
     setShowAddCert(false);
-    setSaveStatus('Certification added successfully!');
+    setSaveStatus('Certification saved successfully!');
     setTimeout(() => setSaveStatus(''), 3000);
   };
 
   const handleDeleteCert = (idx) => {
-    setCerts(certs.filter((_, i) => i !== idx));
+    const updated = certs.filter((_, i) => i !== idx);
+    setCerts(updated);
+    localStorage.setItem(`student_certs_${userId}`, JSON.stringify(updated));
   };
 
   const saveProfileToOracle = async (profileData) => {
     setSaveStatus('Saving to Oracle DB...');
+    localStorage.setItem(`student_profile_cache_${userId}`, JSON.stringify(profileData));
+
     try {
       const res = await fetch(`${apiBaseUrl}/api/v1/student/${userId}/profile`, {
         method: 'PUT',
@@ -203,7 +246,8 @@ export default function StudentProfile({ apiBaseUrl = 'http://localhost:8000', c
         setTimeout(() => setSaveStatus(''), 3000);
       }
     } catch (err) {
-      setSaveStatus('');
+      setSaveStatus('Saved locally!');
+      setTimeout(() => setSaveStatus(''), 3000);
     }
   };
 
@@ -292,7 +336,6 @@ export default function StudentProfile({ apiBaseUrl = 'http://localhost:8000', c
             <div>
               <label style={{ fontSize: '0.8rem', fontWeight: 700, display: 'block', marginBottom: '4px' }}>GENDER</label>
               <select className="input-field" value={profile.gender} onChange={(e) => setProfile({ ...profile, gender: e.target.value })}>
-                <option value="">Select Gender</option>
                 <option value="Male">Male</option>
                 <option value="Female">Female</option>
                 <option value="Other">Other</option>

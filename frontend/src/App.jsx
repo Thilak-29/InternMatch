@@ -16,15 +16,31 @@ import ProctoredExamModal from './components/ProctoredExamModal';
 import AIChatAssistant from './components/AIChatAssistant';
 
 export default function App() {
-  const [currentUser, setCurrentUser] = useState(null);
-  const [activeTab, setActiveTab] = useState('dashboard');
+  const [currentUser, setCurrentUser] = useState(() => {
+    const cached = localStorage.getItem('internmatch_user');
+    if (cached) {
+      try { return JSON.parse(cached); } catch (e) {}
+    }
+    return null;
+  });
+
+  const [activeTab, setActiveTabState] = useState(() => {
+    return localStorage.getItem('internmatch_tab') || 'dashboard';
+  });
+
   const [showExamModal, setShowExamModal] = useState(false);
   const [activeTestAppId, setActiveTestAppId] = useState(null);
 
   const API_BASE_URL = 'http://localhost:8000';
 
+  const setActiveTab = (tab) => {
+    setActiveTabState(tab);
+    localStorage.setItem('internmatch_tab', tab);
+  };
+
   const handleLoginSuccess = (userData) => {
     setCurrentUser(userData);
+    localStorage.setItem('internmatch_user', JSON.stringify(userData));
     if (userData.role === 'ADMIN') {
       setActiveTab('admin-dashboard');
     } else {
@@ -34,6 +50,8 @@ export default function App() {
 
   const handleLogout = () => {
     setCurrentUser(null);
+    localStorage.removeItem('internmatch_user');
+    localStorage.removeItem('internmatch_tab');
     setActiveTab('dashboard');
   };
 
