@@ -3,7 +3,6 @@ export const API_CONFIG = {
   STUDENT_SERVICE_URL: 'http://localhost:8082',
   COMPANY_SERVICE_URL: 'http://localhost:8083',
   AI_SERVICE_URL: 'http://localhost:8084',
-  GATEWAY_URL: 'http://localhost:8000',
 
   getUrl(service) {
     switch (service) {
@@ -16,7 +15,7 @@ export const API_CONFIG = {
       case 'AI':
         return this.AI_SERVICE_URL;
       default:
-        return this.GATEWAY_URL;
+        return this.AUTH_SERVICE_URL;
     }
   }
 };
