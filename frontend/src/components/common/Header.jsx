@@ -1,5 +1,5 @@
 import React from 'react';
-import { Sparkles, LogOut, User, Building2, ShieldCheck, Briefcase, PlusCircle, Users, BookOpen, Search, FileText } from 'lucide-react';
+import { Sparkles, LogOut, User, Building2, Briefcase, PlusCircle, Users, Search, FileText } from 'lucide-react';
 
 export default function Header({ role, onNavigate, currentTab, onLogout, currentUser }) {
   const roleLabel = role === 'ADMIN' ? 'Placement Admin' : (role === 'COMPANY' ? 'Recruiter' : 'Student');
@@ -37,7 +37,7 @@ export default function Header({ role, onNavigate, currentTab, onLogout, current
         </div>
 
         {role && (
-          <nav style={{ display: 'flex', gap: '6px', alignItems: 'center', flexWrap: 'wrap' }}>
+          <nav style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
             {/* Student Navigation */}
             {role === 'STUDENT' && (
               <>
@@ -71,16 +71,9 @@ export default function Header({ role, onNavigate, currentTab, onLogout, current
               </>
             )}
 
-            {/* Admin Navigation */}
-            {role === 'ADMIN' && (
-              <>
-                <button style={navBtnStyle(currentTab === 'dashboard')} onClick={() => onNavigate('dashboard')}>
-                  <ShieldCheck size={16} /> Placement Cell Control
-                </button>
-              </>
-            )}
+            {/* Admin has no redundant center buttons per user request */}
 
-            <div style={{ height: '24px', width: '1px', background: 'var(--border-light)', margin: '0 8px' }} />
+            <div style={{ height: '24px', width: '1px', background: 'var(--border-light)', margin: '0 4px' }} />
 
             {/* User Profile & Role Tag */}
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px', background: '#F8FAFC', padding: '4px 10px', borderRadius: '10px', border: '1px solid var(--border-light)' }}>
