@@ -105,12 +105,18 @@ public class UserRepository {
 
     public void saveStudentProfile(int userId, String name, String college, int gradYear, double cgpa,
                                    String location, String resumeFileName, String leetcode, String github,
-                                   String yearOfStudy, String degree, String department) {
+                                   String yearOfStudy, String degree, String department, String gender,
+                                   String linkedin, String portfolio, String skills) {
         try {
             jdbcTemplate.update("DELETE FROM student_profiles WHERE user_id=?", userId);
-            jdbcTemplate.update("INSERT INTO student_profiles (user_id, name, college, grad_year, cgpa, address, resume_file_name, leetcode, github, year_of_study, degree, branch, skills) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'React, Java, SQL, Python')",
-                    userId, name, college, gradYear, cgpa, location, resumeFileName, leetcode, github, yearOfStudy, degree, department);
-        } catch (Exception e) {}
+            jdbcTemplate.update("INSERT INTO student_profiles (user_id, name, college, grad_year, cgpa, address, resume_file_name, leetcode, github, year_of_study, degree, branch, gender, linkedin, portfolio, skills) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    userId, name, college, gradYear, cgpa, location, resumeFileName, leetcode, github, yearOfStudy, degree, department, gender, linkedin, portfolio, skills);
+        } catch (Exception e) {
+            try {
+                jdbcTemplate.update("INSERT INTO student_profiles (user_id, name, college, grad_year, cgpa, address, leetcode, github, skills) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                        userId, name, college, gradYear, cgpa, location, leetcode, github, skills);
+            } catch (Exception e2) {}
+        }
     }
 
     public void saveCompanyProfile(int userId, String companyName, String industry, String website,
@@ -125,7 +131,7 @@ public class UserRepository {
     public List<Map<String, Object>> getAllUsersWithProfiles() {
         try {
             String sql = "SELECT u.id, u.username, u.name, u.email, u.role, u.created_at, " +
-                    "sp.college, sp.branch, sp.degree, sp.cgpa, sp.skills, sp.leetcode, sp.github, sp.address as city, sp.phone, " +
+                    "sp.college, sp.branch, sp.degree, sp.cgpa, sp.skills, sp.leetcode, sp.github, sp.address as city, sp.gender, sp.year_of_study, sp.grad_year, sp.linkedin, sp.portfolio, " +
                     "c.company_name, c.industry, c.location as company_location, c.website " +
                     "FROM users u " +
                     "LEFT JOIN student_profiles sp ON u.id = sp.user_id " +
@@ -148,8 +154,13 @@ public class UserRepository {
                     clone.put("college", "Karpagam College of Engineering");
                     clone.put("branch", "Computer Science & Engineering");
                     clone.put("cgpa", 8.5);
-                    clone.put("skills", "React, Java, SQL, Python");
+                    clone.put("skills", "React, Java, SQL, Python, Spring Boot");
                     clone.put("city", "Thenkasi");
+                    clone.put("leetcode", "Thilak0329");
+                    clone.put("github", "Thilak-29");
+                    clone.put("gender", "Male");
+                    clone.put("year_of_study", "3rd Year");
+                    clone.put("grad_year", 2026);
                 } else if ("COMPANY".equalsIgnoreCase(String.valueOf(u.get("role")))) {
                     clone.put("industry", "Semiconductors & AI");
                     clone.put("location", "Bengaluru / Remote");
