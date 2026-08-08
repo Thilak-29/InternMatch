@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { ShieldCheck, Users, Building2, Briefcase, FileText, Trash2, Search, ChevronDown, ChevronUp, MapPin, DollarSign, Clock, Award, Mail, Phone, BookOpen, Code, ExternalLink } from 'lucide-react';
+import { Users, Building2, Briefcase, FileText, Trash2, Search, ChevronDown, ChevronUp, MapPin, DollarSign, Clock, Award, Mail, Phone, BookOpen, Code, ExternalLink, GraduationCap, Shield } from 'lucide-react';
 
 export default function AdminDashboard({ apiBaseUrl = 'http://localhost:8081', currentUser }) {
   const [stats, setStats] = useState({
@@ -12,19 +12,19 @@ export default function AdminDashboard({ apiBaseUrl = 'http://localhost:8081', c
   const [usersList, setUsersList] = useState([]);
   const [internshipsList, setInternshipsList] = useState([]);
   const [applicationsList, setApplicationsList] = useState([]);
-  const [expandedCompany, setExpandedCompany] = useState(null);
   const [expandedJob, setExpandedJob] = useState(null);
 
   const [activeTab, setActiveTab] = useState('ALL');
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedCity, setSelectedCity] = useState('ALL');
   const [alertMsg, setAlertMsg] = useState('');
+  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     fetchAdminData();
   }, []);
 
   const fetchAdminData = async () => {
+    setIsLoading(true);
     let localJobs = [];
     try {
       const cached = localStorage.getItem('internmatch_posted_jobs');
@@ -93,13 +93,11 @@ export default function AdminDashboard({ apiBaseUrl = 'http://localhost:8081', c
       } catch (e) {}
     }
 
-    if (localJobs.length > 0 && internshipsList.length === 0) {
-      setInternshipsList(localJobs);
-    }
+    setIsLoading(false);
   };
 
   const handleDeleteUser = async (userId, username) => {
-    if (!window.confirm(`Are you sure you want to permanently delete user "${username}" from the platform?`)) {
+    if (!window.confirm(`Are you sure you want to permanently delete user "${username}" from the database?`)) {
       return;
     }
 
@@ -110,7 +108,7 @@ export default function AdminDashboard({ apiBaseUrl = 'http://localhost:8081', c
       await fetch(`${apiBaseUrl}/api/v1/admin/users/${userId}`, { method: 'DELETE' });
     } catch (e) {}
 
-    setAlertMsg(`User "${username}" was deleted successfully.`);
+    setAlertMsg(`User "${username}" was deleted from Oracle Database.`);
     setUsersList(prev => prev.filter(u => (u.id || u.ID) !== userId));
     setTimeout(() => setAlertMsg(''), 4000);
   };
@@ -138,8 +136,8 @@ export default function AdminDashboard({ apiBaseUrl = 'http://localhost:8081', c
   };
 
   const allDisplayUsers = usersList.length > 0 ? usersList : [
-    { id: 3, name: 'Thilak P', username: 'thilak', email: 'thilak@gmail.com', role: 'STUDENT', college: 'Karpagam College of Engineering', branch: 'Computer Science & Engineering', city: 'Coimbatore', cgpa: 8.5, skills: 'React, Java, SQL, Python' },
-    { id: 12, name: 'Vignesh Sankarakumar', username: 'demo1@gmail.com', email: 'demo1@gmail.com', role: 'STUDENT', college: 'Karpagam College of Engineering', branch: 'Computer Science & Engineering', city: 'Thenkasi', cgpa: 8.5, skills: 'React, Java, SQL, Python' },
+    { id: 3, name: 'Thilak P', username: 'thilak', email: 'thilak@gmail.com', role: 'STUDENT', college: 'Karpagam College of Engineering', branch: 'Computer Science & Engineering', degree: 'B.E.', cgpa: 8.5, skills: 'React, Java, SQL, Python, DSA', leetcode: 'Thilak0329', github: 'Thilak-29', city: 'Coimbatore' },
+    { id: 12, name: 'Vignesh Sankarakumar', username: 'demo1@gmail.com', email: 'demo1@gmail.com', role: 'STUDENT', college: 'Karpagam College of Engineering', branch: 'Computer Science & Engineering', degree: 'B.E.', cgpa: 8.5, skills: 'React, Java, SQL, Python, Spring Boot', leetcode: 'Thilak0329', github: 'Thilak-29', city: 'Thenkasi' },
     { id: 10, name: 'NVIDIA Corporation', username: 'nvidia', email: 'nvidia@gmail.com', role: 'COMPANY', industry: 'Semiconductors & AI', location: 'Bengaluru / Remote', website: 'https://nvidia.com' },
     { id: 11, name: 'Google Cloud Labs', username: 'google', email: 'google@gmail.com', role: 'COMPANY', industry: 'Cloud & Distributed Systems', location: 'Hyderabad', website: 'https://google.com' }
   ];
@@ -154,6 +152,8 @@ export default function AdminDashboard({ apiBaseUrl = 'http://localhost:8081', c
     { id: 102, internship_id: 1, candidate_name: 'Thilak P', email: 'thilak@gmail.com', college: 'Karpagam College of Engineering', branch: 'Computer Science & Engineering', cgpa: 8.5, test_score: 88, status: 'SHORTLISTED' }
   ];
 
+  const studentTalentList = allDisplayUsers.filter(u => (u.role || u.ROLE || 'STUDENT').toUpperCase() === 'STUDENT');
+
   const filteredUsers = allDisplayUsers.filter(u => {
     const role = (u.role || u.ROLE || 'STUDENT').toUpperCase();
     if (activeTab === 'STUDENTS' && role !== 'STUDENT') return false;
@@ -165,22 +165,9 @@ export default function AdminDashboard({ apiBaseUrl = 'http://localhost:8081', c
     const college = (u.college || u.COLLEGE || '').toLowerCase();
     const skills = (u.skills || u.SKILLS || '').toLowerCase();
     const branch = (u.branch || u.BRANCH || '').toLowerCase();
-    const city = (u.city || u.location || u.LOCATION || u.address || u.ADDRESS || '').toLowerCase();
+    const city = (u.city || u.location || u.LOCATION || u.address || '').toLowerCase();
 
-    const matchesQuery = name.includes(q) || email.includes(q) || college.includes(q) || skills.includes(q) || branch.includes(q) || city.includes(q);
-    const matchesCity = selectedCity === 'ALL' || city.toLowerCase().includes(selectedCity.toLowerCase());
-
-    return matchesQuery && matchesCity;
-  });
-
-  const filteredJobs = allDisplayJobs.filter(j => {
-    const q = searchQuery.toLowerCase();
-    const title = (j.title || j.TITLE || '').toLowerCase();
-    const comp = (j.company_name || j.COMPANY_NAME || '').toLowerCase();
-    const loc = (j.location || j.LOCATION || '').toLowerCase();
-    const skills = (j.required_skills || j.REQUIRED_SKILLS || '').toLowerCase();
-
-    return title.includes(q) || comp.includes(q) || loc.includes(q) || skills.includes(q);
+    return name.includes(q) || email.includes(q) || college.includes(q) || skills.includes(q) || branch.includes(q) || city.includes(q);
   });
 
   const studentCount = allDisplayUsers.filter(u => (u.role || u.ROLE) === 'STUDENT').length || 2;
@@ -193,12 +180,12 @@ export default function AdminDashboard({ apiBaseUrl = 'http://localhost:8081', c
       <div className="glass-card" style={{ padding: '28px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'linear-gradient(135deg, #1E293B 0%, #0F172A 100%)', color: '#FFFFFF', flexWrap: 'wrap', gap: '16px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
           <div style={{ width: '48px', height: '48px', borderRadius: '12px', background: '#2563EB', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <ShieldCheck size={28} color="#FFFFFF" />
+            <Shield size={28} color="#FFFFFF" />
           </div>
           <div>
-            <h1 style={{ fontSize: '1.5rem', fontWeight: 800 }}>Placement Cell Master Control</h1>
+            <h1 style={{ fontSize: '1.5rem', fontWeight: 800 }}>Admin Platform Control</h1>
             <p style={{ fontSize: '0.85rem', color: '#94A3B8', marginTop: '2px' }}>
-              Administrator: <strong>{currentUser?.name || 'Thilak Vignesh (Admin)'}</strong> • Live Oracle Database Synced
+              Administrator: <strong>{currentUser?.name || 'Thilak Vignesh (Admin)'}</strong> • Oracle Database Connected
             </p>
           </div>
         </div>
@@ -236,7 +223,7 @@ export default function AdminDashboard({ apiBaseUrl = 'http://localhost:8081', c
         </div>
 
         <div className="glass-card" style={{ padding: '20px', display: 'flex', alignItems: 'center', gap: '16px' }}>
-          <div style={{ width: '46px', height: '46px', borderRadius: '10px', background: '#FEF3C7', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#D97706' }}>
+          <div style={{ width: '46px', height: '46px', borderRadius: '10px', background: '#FEF3F2', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#DC2626' }}>
             <Briefcase size={22} />
           </div>
           <div>
@@ -256,103 +243,12 @@ export default function AdminDashboard({ apiBaseUrl = 'http://localhost:8081', c
         </div>
       </div>
 
-      {/* Section 1: Active Posted Internships & Applicant Inspector */}
-      <div className="glass-card" style={{ padding: '28px' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '18px', flexWrap: 'wrap', gap: '12px' }}>
-          <div>
-            <h2 style={{ fontSize: '1.25rem', fontWeight: 800, color: 'var(--text-main)' }}>Active Posted Internships & Applicant Inspector</h2>
-            <p style={{ fontSize: '0.82rem', color: 'var(--text-muted)' }}>Click on any internship to view the full list of student applicants</p>
-          </div>
-          <span className="badge badge-auth">Live Pipeline</span>
-        </div>
-
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-          {filteredJobs.map((job, idx) => {
-            const jobId = job.id || job.ID;
-            const title = job.title || job.TITLE || 'Internship';
-            const comp = job.company_name || job.COMPANY_NAME || 'Company';
-            const stipend = job.stipend || job.STIPEND || 0;
-            const mode = job.work_mode || job.WORK_MODE || 'Hybrid';
-            const loc = job.location || job.LOCATION || 'Location';
-            const openings = job.openings || job.OPENINGS || 1;
-            const deadline = job.application_deadline || job.APPLICATION_DEADLINE || '';
-            const isClosed = job.status === 'CLOSED' || job.STATUS === 'CLOSED';
-            const isExpanded = expandedJob === jobId;
-
-            const jobApplicants = allDisplayApplicants.filter(a => (a.internship_id || a.INTERNSHIP_ID) === jobId);
-
-            return (
-              <div key={jobId || idx} style={{ border: '1px solid var(--border-light)', borderRadius: '12px', background: '#FFFFFF', overflow: 'hidden' }}>
-                <div
-                  onClick={() => setExpandedJob(isExpanded ? null : jobId)}
-                  style={{ padding: '18px 22px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer', background: isExpanded ? '#F8FAFC' : '#FFFFFF', transition: 'background 0.2s ease', flexWrap: 'wrap', gap: '12px' }}
-                >
-                  <div style={{ flex: 1, minWidth: '280px' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                      <h3 style={{ fontSize: '1.1rem', fontWeight: 700, color: 'var(--text-main)' }}>{title}</h3>
-                      <span className="badge badge-auth" style={{ background: isClosed ? '#FEE2E2' : '#DCFCE7', color: isClosed ? '#DC2626' : '#166534', fontWeight: 700 }}>
-                        {isClosed ? 'Closed' : 'Active'}
-                      </span>
-                    </div>
-                    <div style={{ fontSize: '0.85rem', color: '#2563EB', fontWeight: 600, marginTop: '2px' }}>
-                      {comp} • <span style={{ color: 'var(--text-muted)' }}>{mode} ({loc})</span> • ₹{stipend}/mo • Openings: {openings}
-                    </div>
-                    {deadline && (
-                      <div style={{ fontSize: '0.78rem', color: '#DC2626', fontWeight: 600, marginTop: '4px' }}>
-                        <Clock size={12} style={{ display: 'inline', marginRight: '4px' }} /> Deadline: {deadline}
-                      </div>
-                    )}
-                  </div>
-
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                    <button onClick={(e) => { e.stopPropagation(); handleDeleteInternship(jobId, title); }} className="btn-secondary" style={{ padding: '6px 10px', fontSize: '0.78rem', color: '#DC2626', borderColor: '#FECACA' }}>
-                      <Trash2 size={13} />
-                    </button>
-                    {isExpanded ? <ChevronUp size={18} color="#64748B" /> : <ChevronDown size={18} color="#64748B" />}
-                  </div>
-                </div>
-
-                {isExpanded && (
-                  <div style={{ padding: '20px 24px', borderTop: '1px solid var(--border-light)', background: '#F8FAFC' }}>
-                    <h4 style={{ fontSize: '0.95rem', fontWeight: 700, color: 'var(--text-main)', marginBottom: '12px' }}>
-                      Applied Candidates for {title}:
-                    </h4>
-
-                    {jobApplicants.length > 0 ? (
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                        {jobApplicants.map((app, ai) => (
-                          <div key={ai} style={{ padding: '14px 18px', background: '#FFFFFF', borderRadius: '8px', border: '1px solid var(--border-light)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
-                            <div>
-                              <div style={{ fontWeight: 700, fontSize: '0.95rem', color: 'var(--text-main)' }}>{app.candidate_name || app.student_name || app.NAME || 'Candidate'}</div>
-                              <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-                                {app.college || 'Karpagam College of Engineering'} • <strong>CGPA: {app.cgpa || '8.5'}</strong>
-                              </div>
-                            </div>
-                            <span className="badge badge-auth" style={{ textTransform: 'uppercase', fontSize: '0.75rem' }}>
-                              {app.status || app.STATUS || 'APPLIED'}
-                            </span>
-                          </div>
-                        ))}
-                      </div>
-                    ) : (
-                      <div style={{ padding: '16px', textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.85rem' }}>
-                        No applicants have applied for this position yet.
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-            );
-          })}
-        </div>
-      </div>
-
-      {/* Section 2: Platform Users Directory */}
+      {/* Section 1: Platform Users */}
       <div className="glass-card" style={{ padding: '28px' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', flexWrap: 'wrap', gap: '14px' }}>
           <div>
-            <h2 style={{ fontSize: '1.25rem', fontWeight: 800, color: 'var(--text-main)' }}>Platform Users & Student Talent Directory</h2>
-            <p style={{ fontSize: '0.82rem', color: 'var(--text-muted)' }}>Manage accounts and search candidates from the College Oracle Database</p>
+            <h2 style={{ fontSize: '1.25rem', fontWeight: 800, color: 'var(--text-main)' }}>Platform Users</h2>
+            <p style={{ fontSize: '0.82rem', color: 'var(--text-muted)' }}>Real-time student & recruiter directory fetched from the College Oracle Database</p>
           </div>
 
           <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
@@ -396,10 +292,10 @@ export default function AdminDashboard({ apiBaseUrl = 'http://localhost:8081', c
             <thead>
               <tr style={{ background: '#F8FAFC', borderBottom: '2px solid var(--border-light)', color: '#475569' }}>
                 <th style={{ padding: '12px 16px' }}>User ID</th>
-                <th style={{ padding: '12px 16px' }}>Name / Candidate</th>
+                <th style={{ padding: '12px 16px' }}>Name / Entity</th>
                 <th style={{ padding: '12px 16px' }}>Email</th>
                 <th style={{ padding: '12px 16px' }}>Role</th>
-                <th style={{ padding: '12px 16px' }}>Branch / Location</th>
+                <th style={{ padding: '12px 16px' }}>College / Industry</th>
                 <th style={{ padding: '12px 16px' }}>Action</th>
               </tr>
             </thead>
@@ -408,9 +304,8 @@ export default function AdminDashboard({ apiBaseUrl = 'http://localhost:8081', c
                 const uid = u.id || u.ID;
                 const name = u.name || u.NAME || u.username || u.USERNAME;
                 const email = u.email || u.EMAIL;
-                const role = u.role || u.ROLE || 'STUDENT';
-                const branch = u.branch || u.BRANCH || (role === 'COMPANY' ? 'Recruiter' : 'Computer Science');
-                const city = u.city || u.location || u.LOCATION || u.address || 'Thenkasi';
+                const role = (u.role || u.ROLE || 'STUDENT').toUpperCase();
+                const collegeOrIndustry = role === 'COMPANY' ? (u.industry || u.INDUSTRY || 'Semiconductors & AI') : (u.college || u.COLLEGE || 'Karpagam College of Engineering');
 
                 return (
                   <tr key={uid} style={{ borderBottom: '1px solid var(--border-light)' }}>
@@ -422,8 +317,8 @@ export default function AdminDashboard({ apiBaseUrl = 'http://localhost:8081', c
                         {role}
                       </span>
                     </td>
-                    <td style={{ padding: '12px 16px', color: 'var(--text-sub)', fontSize: '0.8rem' }}>
-                      {branch} • {city}
+                    <td style={{ padding: '12px 16px', color: 'var(--text-sub)' }}>
+                      {collegeOrIndustry}
                     </td>
                     <td style={{ padding: '12px 16px' }}>
                       <button
@@ -439,6 +334,64 @@ export default function AdminDashboard({ apiBaseUrl = 'http://localhost:8081', c
               })}
             </tbody>
           </table>
+        </div>
+      </div>
+
+      {/* Section 2: Student Talent Directory */}
+      <div className="glass-card" style={{ padding: '28px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', flexWrap: 'wrap', gap: '14px' }}>
+          <div>
+            <h2 style={{ fontSize: '1.25rem', fontWeight: 800, color: 'var(--text-main)' }}>Student Talent Directory</h2>
+            <p style={{ fontSize: '0.82rem', color: 'var(--text-muted)' }}>Comprehensive candidate profiles, GPA, verified skills, and coding handles from Oracle DB</p>
+          </div>
+          <span className="badge badge-ai">Verified Talent Records</span>
+        </div>
+
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))', gap: '16px' }}>
+          {studentTalentList.map((st, idx) => {
+            const name = st.name || st.NAME || 'Candidate';
+            const email = st.email || st.EMAIL || 'student@gmail.com';
+            const college = st.college || st.COLLEGE || 'Karpagam College of Engineering';
+            const branch = st.branch || st.BRANCH || 'Computer Science & Engineering';
+            const degree = st.degree || st.DEGREE || 'B.E.';
+            const cgpa = st.cgpa || st.CGPA || 8.5;
+            const skills = st.skills || st.SKILLS || 'React, Java, SQL, Python, DSA';
+            const leetcode = st.leetcode || st.LEETCODE || 'Thilak0329';
+            const github = st.github || st.GITHUB || 'Thilak-29';
+            const city = st.city || st.address || st.location || 'Thenkasi';
+
+            return (
+              <div key={idx} style={{ padding: '22px', border: '1px solid var(--border-light)', borderRadius: '12px', background: '#FFFFFF', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                  <div>
+                    <h3 style={{ fontSize: '1.15rem', fontWeight: 800, color: 'var(--text-main)' }}>{name}</h3>
+                    <div style={{ fontSize: '0.85rem', color: '#2563EB', fontWeight: 600 }}>
+                      {degree} in {branch}
+                    </div>
+                  </div>
+                  <span className="badge badge-auth" style={{ fontSize: '0.78rem', fontWeight: 700 }}>
+                    CGPA: {cgpa} / 10
+                  </span>
+                </div>
+
+                <div style={{ fontSize: '0.82rem', color: 'var(--text-muted)', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                  <div>🏛️ {college}</div>
+                  <div>📍 Location: {city} • ✉️ {email}</div>
+                </div>
+
+                <div style={{ display: 'flex', gap: '12px', fontSize: '0.8rem', flexWrap: 'wrap' }}>
+                  <span style={{ color: '#D97706', fontWeight: 700 }}>&lt;&gt; LeetCode: {leetcode}</span>
+                  <span style={{ color: '#2563EB', fontWeight: 700 }}>GitHub: {github}</span>
+                </div>
+
+                {skills && (
+                  <div style={{ fontSize: '0.78rem', color: 'var(--text-sub)', background: '#F8FAFC', padding: '8px 12px', borderRadius: '6px' }}>
+                    <strong>Skills:</strong> {skills}
+                  </div>
+                )}
+              </div>
+            );
+          })}
         </div>
       </div>
     </div>

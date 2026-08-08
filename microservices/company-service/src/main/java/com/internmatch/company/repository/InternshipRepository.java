@@ -13,6 +13,7 @@ public class InternshipRepository {
 
     public InternshipRepository(JdbcTemplate jdbcTemplate) {
         this.jdbcTemplate = jdbcTemplate;
+        initMockData();
     }
 
     private Map<String, Object> normalizeMap(Map<String, Object> raw) {
@@ -30,6 +31,54 @@ public class InternshipRepository {
             res.add(normalizeMap(m));
         }
         return res;
+    }
+
+    private void initMockData() {
+        addInternshipToMemory(1, 10, "NVIDIA Corporation", "AI/ML Engineering Intern", "Artificial Intelligence", "Python, PyTorch, CUDA, Algorithms", "Hybrid", 2026, "Bengaluru", "3 Months", "2026-06-01", "2026-08-31", 45000.0, 5, "2026-07-30", "ACTIVE", 1);
+        addInternshipToMemory(2, 11, "Google Cloud Labs", "Full-Stack Software Engineering Intern", "Cloud & Web Systems", "React, Java, Spring Boot, SQL", "Remote", 2026, "Hyderabad", "6 Months", "2026-06-01", "2026-11-30", 40000.0, 4, "2026-08-15", "ACTIVE", 1);
+        addInternshipToMemory(3, 10, "NVIDIA Corporation", "High Performance Computing Intern", "Systems Engineering", "C++, CUDA, Linux, Parallel Programming", "On-site", 2026, "Bengaluru", "4 Months", "2026-07-01", "2026-10-31", 50000.0, 3, "2026-08-20", "ACTIVE", 1);
+    }
+
+    private void addInternshipToMemory(int id, int companyId, String companyName, String title, String domain,
+                                      String requiredSkills, String workMode, int gradYear, String location,
+                                      String duration, String startDate, String endDate, double stipend,
+                                      int openings, String deadline, String status, int isActive) {
+        Map<String, Object> job = new HashMap<>();
+        job.put("id", id);
+        job.put("ID", id);
+        job.put("company_id", companyId);
+        job.put("COMPANY_ID", companyId);
+        job.put("company_name", companyName);
+        job.put("COMPANY_NAME", companyName);
+        job.put("title", title);
+        job.put("TITLE", title);
+        job.put("domain", domain);
+        job.put("DOMAIN", domain);
+        job.put("required_skills", requiredSkills);
+        job.put("REQUIRED_SKILLS", requiredSkills);
+        job.put("work_mode", workMode);
+        job.put("WORK_MODE", workMode);
+        job.put("grad_year", gradYear);
+        job.put("GRAD_YEAR", gradYear);
+        job.put("location", location);
+        job.put("LOCATION", location);
+        job.put("duration", duration);
+        job.put("DURATION", duration);
+        job.put("start_date", startDate);
+        job.put("START_DATE", startDate);
+        job.put("end_date", endDate);
+        job.put("END_DATE", endDate);
+        job.put("stipend", stipend);
+        job.put("STIPEND", stipend);
+        job.put("openings", openings);
+        job.put("OPENINGS", openings);
+        job.put("application_deadline", deadline);
+        job.put("APPLICATION_DEADLINE", deadline);
+        job.put("status", status);
+        job.put("STATUS", status);
+        job.put("is_active", isActive);
+        job.put("IS_ACTIVE", isActive);
+        memoryInternships.add(0, normalizeMap(job));
     }
 
     public List<Map<String, Object>> findAll() {
@@ -66,26 +115,7 @@ public class InternshipRepository {
                                String duration, String startDate, String endDate, double stipend,
                                int openings, String deadline) {
         int nextId = memoryInternships.size() + 10;
-        Map<String, Object> job = new HashMap<>();
-        job.put("id", nextId);
-        job.put("ID", nextId);
-        job.put("company_id", companyId);
-        job.put("company_name", companyName);
-        job.put("title", title);
-        job.put("domain", domain);
-        job.put("required_skills", requiredSkills);
-        job.put("work_mode", workMode);
-        job.put("grad_year", gradYear);
-        job.put("location", location);
-        job.put("duration", duration);
-        job.put("start_date", startDate);
-        job.put("end_date", endDate);
-        job.put("stipend", stipend);
-        job.put("openings", openings);
-        job.put("application_deadline", deadline);
-        job.put("status", "ACTIVE");
-        job.put("is_active", 1);
-        memoryInternships.add(0, normalizeMap(job));
+        addInternshipToMemory(nextId, companyId, companyName, title, domain, requiredSkills, workMode, gradYear, location, duration, startDate, endDate, stipend, openings, deadline, "ACTIVE", 1);
 
         try {
             jdbcTemplate.update(
