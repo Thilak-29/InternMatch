@@ -1,24 +1,32 @@
 import React, { useState, useEffect } from 'react';
-import { Send, FileText, CheckCircle2, Clock, MapPin, DollarSign, Sparkles, Award, ArrowRight } from 'lucide-react';
+import { Send, FileText, CheckCircle2, Clock, MapPin, DollarSign, Sparkles, Award, ArrowRight, AlertCircle } from 'lucide-react';
+import ProctoredExamModal from './ProctoredExamModal';
 
 export default function StudentApplications({ apiBaseUrl = 'http://localhost:8082', currentUser }) {
+  const studentId = currentUser?.userId || currentUser?.user_id || currentUser?.id || currentUser?.ID;
+
+  if (!studentId) {
+    return (
+      <div className="glass-card" style={{ padding: '36px', textAlign: 'center', color: '#DC2626' }}>
+        <AlertCircle size={32} style={{ margin: '0 auto 12px auto' }} />
+        <h3>Session Authentication Error</h3>
+        <p style={{ fontSize: '0.85rem', marginTop: '6px' }}>
+          Unable to identify authenticated student ID. Please sign in again.
+        </p>
+      </div>
+    );
+  }
+
   const [applications, setApplications] = useState([]);
-  const studentId = currentUser?.userId || currentUser?.user_id || currentUser?.id || currentUser?.ID || 3;
+  const [isLoading, setIsLoading] = useState(true);
   const [testModalApp, setTestModalApp] = useState(null);
-  const [takingTest, setTakingTest] = useState(false);
-  const [testAnswer, setTestAnswer] = useState('');
-  const [testSubmitted, setTestSubmitted] = useState(false);
 
   useEffect(() => {
     fetchApplications();
   }, [studentId]);
 
   const fetchApplications = async () => {
-    let localApps = [];
-    try {
-      const cached = localStorage.getItem(`internmatch_student_applications_${studentId}`) || localStorage.getItem('internmatch_student_applications');
-      if (cached) localApps = JSON.parse(cached);
-    } catch (e) {}
+    setIsLoading(true);
 
     const endpoints = [
       `${apiBaseUrl}/api/v1/student/${studentId}/applications`,
@@ -26,136 +34,133 @@ export default function StudentApplications({ apiBaseUrl = 'http://localhost:808
       `http://localhost:8000/api/v1/student/${studentId}/applications`
     ];
 
-    let fetched = false;
+    let foundApps = null;
     for (const url of endpoints) {
       try {
         const res = await fetch(url);
         if (res.ok) {
           const data = await res.json();
           if (data && Array.isArray(data)) {
-            const mergedMap = new Map();
-            [...data, ...localApps].forEach(a => {
-              const key = a.id || a.ID || a.title || a.internship_id;
-              if (key && !mergedMap.has(key)) mergedMap.set(key, a);
-            });
-            const combined = Array.from(mergedMap.values());
-            setApplications(combined);
-            fetched = true;
+            foundApps = data;
             break;
           }
         }
+      } catch (e) {
+        console.error("Applications fetch error:", e);
+      }
+    }
+
+    setApplications(foundApps || []);
+    setIsLoading(false);
+  };
+
+  const handleTestComplete = async (score) => {
+    if (!testModalApp) return;
+    const appId = testModalApp.id || testModalApp.ID;
+
+    const endpoints = [
+      `${apiBaseUrl}/api/v1/student/applications/${appId}/test-score`,
+      `http://localhost:8082/api/v1/student/applications/${appId}/test-score`,
+      `http://localhost:8000/api/v1/student/applications/${appId}/test-score`
+    ];
+
+    for (const url of endpoints) {
+      try {
+        await fetch(url, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ score })
+        });
+        break;
       } catch (e) {}
     }
 
-    if (!fetched) {
-      if (localApps.length > 0) {
-        setApplications(localApps);
-      } else {
-        const defaultApps = [
-          { id: 101, internship_id: 1, title: 'AI/ML Engineering Intern', company_name: 'NVIDIA Corporation', location: 'Bengaluru', stipend: 45000, status: 'OFFER_SENT', applied_at: '2026-08-05', match_score: 94, test_score: 92 },
-          { id: 102, internship_id: 2, title: 'Full-Stack Software Engineering Intern', company_name: 'Google Cloud Labs', location: 'Hyderabad', stipend: 40000, status: 'SHORTLISTED', applied_at: '2026-08-07', match_score: 91, test_score: 88 }
-        ];
-        setApplications(defaultApps);
-      }
-    }
-  };
-
-  const handleOpenTest = (app) => {
-    setTestModalApp(app);
-    setTakingTest(false);
-    setTestSubmitted(false);
-    setTestAnswer('');
-  };
-
-  const handleStartTest = () => {
-    setTakingTest(true);
-  };
-
-  const handleSubmitTest = async (e) => {
-    e.preventDefault();
-    setTestSubmitted(true);
-    const appId = testModalApp.id || testModalApp.ID || 101;
-    const score = 94;
-
-    try {
-      await fetch(`http://localhost:8082/api/v1/student/applications/${appId}/test-score`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ test_score: score, status: 'TEST_PASSED', stage: 'INTERVIEW' })
-      });
-    } catch (e) {}
-
-    // Update locally
-    const updated = applications.map(a => {
-      if ((a.id || a.ID) === appId) {
-        return { ...a, status: 'TEST_PASSED', test_score: score };
+    setApplications(prev => prev.map(a => {
+      const aid = a.id || a.ID;
+      if (aid === appId) {
+        return {
+          ...a,
+          test_score: score,
+          status: score >= 60 ? 'TEST_PASSED' : 'ASSESSMENT_FAILED',
+          stage: score >= 60 ? 'INTERVIEW' : 'REJECTED'
+        };
       }
       return a;
-    });
-    setApplications(updated);
-    localStorage.setItem(`internmatch_student_applications_${studentId}`, JSON.stringify(updated));
+    }));
 
-    setTimeout(() => {
-      setTestModalApp(null);
-    }, 2000);
+    setTestModalApp(null);
   };
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '24px', maxWidth: '1000px', margin: '0 auto' }}>
-      <div className="glass-card" style={{ padding: '24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '24px', maxWidth: '1200px', margin: '0 auto' }}>
+      <div className="glass-card" style={{ padding: '24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px' }}>
         <div>
-          <h2 style={{ fontSize: '1.35rem', fontWeight: 800, color: 'var(--text-main)' }}>My Submitted Applications</h2>
-          <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>Track recruitment lifecycle stages from screening test to offer dispatch.</p>
+          <h2 style={{ fontSize: '1.4rem', fontWeight: 800, color: 'var(--text-main)' }}>My Internship Applications</h2>
+          <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginTop: '2px' }}>
+            Real-time candidate recruitment tracking and proctored technical screening assessments
+          </p>
         </div>
-        <span className="badge badge-ai">Oracle DB Synced</span>
+        <span className="badge badge-ai" style={{ padding: '6px 14px' }}>
+          {applications.length} Total Submissions
+        </span>
       </div>
 
-      {applications && applications.length > 0 ? (
+      {isLoading ? (
+        <div className="glass-card" style={{ padding: '48px', textAlign: 'center', color: 'var(--text-muted)' }}>
+          Loading your applications from database...
+        </div>
+      ) : applications.length > 0 ? (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
           {applications.map((app, idx) => {
-            const title = app.title || app.job_title || app.role_title || app.JOB_TITLE || app.ROLE_TITLE || 'Software Engineering Intern';
-            const company = app.company_name || app.COMPANY_NAME || 'Enterprise Recruiter';
-            const location = app.location || app.LOCATION || 'Bengaluru';
-            const stipend = app.stipend || app.STIPEND || 40000;
+            const title = app.title || app.job_title || app.role_title || app.TITLE || 'Software Engineering Intern';
+            const company = app.company_name || app.COMPANY_NAME || 'Enterprise Partner';
+            const loc = app.location || app.LOCATION || 'Bengaluru';
+            const stipend = app.stipend || app.STIPEND || 35000;
             const status = app.status || app.STATUS || 'APPLIED';
-            const appliedDate = app.applied_at || app.APPLIED_AT || '2026-08-08';
+            const appliedDate = app.applied_at || app.APPLIED_AT || 'Recently';
             const matchScore = app.match_score || 94;
-            const testScore = app.test_score || (status === 'OFFER_SENT' ? 92 : (status === 'TEST_PASSED' ? 94 : null));
+            const testScore = app.test_score !== null && app.test_score !== undefined ? app.test_score : null;
 
+            const isShortlisted = status === 'SHORTLISTED' || status === 'ACCEPTED_FOR_TEST';
             const isOffer = status === 'OFFER_SENT' || status === 'HIRED' || status === 'OFFER';
 
             return (
-              <div key={app.id || app.ID || idx} className="glass-card" style={{ padding: '24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px' }}>
-                <div style={{ flex: 1, minWidth: '280px' }}>
+              <div key={app.id || app.ID || idx} className="glass-card" style={{ padding: '24px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '16px' }}>
+                <div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                    <h3 style={{ fontSize: '1.15rem', fontWeight: 700, color: 'var(--text-main)' }}>{title}</h3>
-                    <span className="badge badge-ai" style={{ fontSize: '0.75rem', padding: '2px 8px' }}>
+                    <h3 style={{ fontSize: '1.2rem', fontWeight: 800, color: 'var(--text-main)' }}>{title}</h3>
+                    <span className="badge badge-ai" style={{ padding: '2px 8px', fontSize: '0.72rem' }}>
                       ⚡ {matchScore}% AI Match
                     </span>
                   </div>
 
                   <div style={{ fontSize: '0.9rem', color: '#2563EB', fontWeight: 600, marginTop: '4px' }}>
-                    {company}
+                    {company} • <span style={{ color: 'var(--text-muted)' }}>{loc} • ₹{stipend}/mo</span>
                   </div>
 
-                  <div style={{ display: 'flex', gap: '16px', fontSize: '0.82rem', color: 'var(--text-muted)', marginTop: '8px', flexWrap: 'wrap' }}>
-                    <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}><MapPin size={13} /> {location}</span>
-                    <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}><DollarSign size={13} /> ₹{stipend}/mo</span>
-                    <span>Applied on: <strong>{appliedDate}</strong></span>
-                    {testScore && (
-                      <span style={{ color: '#059669', fontWeight: 700 }}>Test Score: {testScore}%</span>
-                    )}
+                  <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '8px' }}>
+                    Applied Date: <strong>{appliedDate}</strong>
                   </div>
+
+                  {testScore !== null && (
+                    <div style={{ fontSize: '0.8rem', color: testScore >= 60 ? '#166534' : '#DC2626', fontWeight: 700, marginTop: '6px' }}>
+                      ✓ Proctored Assessment Score: {testScore}% ({testScore >= 60 ? 'Passed' : 'Below Passing Criteria'})
+                    </div>
+                  )}
                 </div>
 
-                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                  <span className="badge badge-auth" style={{ textTransform: 'uppercase', padding: '8px 16px', fontWeight: 700, background: isOffer ? '#DCFCE7' : '#DBEAFE', color: isOffer ? '#166534' : '#1E40AF' }}>
-                    {isOffer ? '🎉 Offer Sent' : status}
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '10px' }}>
+                  <span className="badge badge-auth" style={{ textTransform: 'uppercase', padding: '6px 14px', background: isOffer ? '#DCFCE7' : (isShortlisted ? '#DBEAFE' : '#F1F5F9'), color: isOffer ? '#166534' : (isShortlisted ? '#1E40AF' : '#475569'), fontWeight: 700 }}>
+                    {isOffer ? '🎉 Offer Sent' : (isShortlisted ? '⚡ Shortlisted — Test Dispatched' : status)}
                   </span>
 
-                  {status === 'SHORTLISTED' && (
-                    <button onClick={() => handleOpenTest(app)} className="btn-primary" style={{ padding: '8px 16px', fontSize: '0.82rem', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                      Take Screening Test <ArrowRight size={14} />
+                  {isShortlisted && (
+                    <button
+                      onClick={() => setTestModalApp(app)}
+                      className="btn-primary"
+                      style={{ padding: '8px 16px', fontSize: '0.82rem', display: 'flex', alignItems: 'center', gap: '6px' }}
+                    >
+                      <Sparkles size={14} /> Take 20 MCQ + 3 Coding Assessment
                     </button>
                   )}
                 </div>
@@ -165,68 +170,17 @@ export default function StudentApplications({ apiBaseUrl = 'http://localhost:808
         </div>
       ) : (
         <div className="glass-card" style={{ padding: '48px', textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.95rem' }}>
-          No applications submitted yet. Browse active internships from the "Explore Internships" tab to apply.
+          You have not applied to any internships yet. Click 'Explore Internships' to find opportunities.
         </div>
       )}
 
-      {/* Proctored Screening Test Modal */}
       {testModalApp && (
-        <div style={{ position: 'fixed', inset: 0, zIndex: 1000, background: 'rgba(15,23,42,0.5)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
-          <div className="glass-card" style={{ background: '#FFFFFF', width: '100%', maxWidth: '600px', padding: '32px', borderRadius: '16px' }}>
-            <h3 style={{ fontSize: '1.25rem', fontWeight: 800, color: 'var(--text-main)', marginBottom: '8px' }}>
-              AI Proctored Technical Screening Test
-            </h3>
-            <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '20px' }}>
-              Position: <strong>{testModalApp.title}</strong> at <strong>{testModalApp.company_name}</strong>
-            </p>
-
-            {!takingTest ? (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                <div style={{ padding: '16px', background: '#F8FAFC', borderRadius: '10px', fontSize: '0.85rem', lineHeight: 1.6 }}>
-                  <div>⏱️ <strong>Duration:</strong> 15 Minutes</div>
-                  <div>📋 <strong>Format:</strong> Algorithmic problem solving & system logic</div>
-                  <div>🛡️ <strong>AI Proctoring:</strong> Browser tab monitoring & webcam verification enabled</div>
-                </div>
-
-                <div style={{ display: 'flex', gap: '12px' }}>
-                  <button onClick={() => setTestModalApp(null)} className="btn-secondary" style={{ flex: 1 }}>
-                    Cancel
-                  </button>
-                  <button onClick={handleStartTest} className="btn-primary" style={{ flex: 1 }}>
-                    Start Assessment Now
-                  </button>
-                </div>
-              </div>
-            ) : testSubmitted ? (
-              <div style={{ textAlign: 'center', padding: '24px' }}>
-                <CheckCircle2 size={48} color="#059669" style={{ margin: '0 auto 12px auto' }} />
-                <h4 style={{ fontSize: '1.15rem', fontWeight: 800, color: '#166534' }}>Assessment Submitted!</h4>
-                <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginTop: '4px' }}>
-                  AI Proctor Score: <strong>94%</strong> • Passed and moved to Interview Stage.
-                </p>
-              </div>
-            ) : (
-              <form onSubmit={handleSubmitTest} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-                <div style={{ padding: '14px', background: '#EFF6FF', borderRadius: '8px', fontSize: '0.85rem' }}>
-                  <strong>Problem 1:</strong> Given an array of integers, write an algorithm to find the longest continuous subarray with sum equal to K in O(N) time.
-                </div>
-
-                <textarea
-                  required
-                  className="input-field"
-                  rows={6}
-                  placeholder="Write your Java / Python / JavaScript solution here..."
-                  value={testAnswer}
-                  onChange={(e) => setTestAnswer(e.target.value)}
-                />
-
-                <button type="submit" className="btn-primary" style={{ width: '100%', height: '42px', justifyContent: 'center' }}>
-                  Submit Code & AI Verify
-                </button>
-              </form>
-            )}
-          </div>
-        </div>
+        <ProctoredExamModal
+          internshipTitle={testModalApp.title || testModalApp.role_title || 'Engineering Intern'}
+          companyName={testModalApp.company_name || 'Enterprise'}
+          onClose={() => setTestModalApp(null)}
+          onComplete={handleTestComplete}
+        />
       )}
     </div>
   );

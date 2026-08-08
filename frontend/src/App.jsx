@@ -38,6 +38,13 @@ export default function App() {
   };
 
   const handleLoginSuccess = (userData) => {
+    // Clear any previous stale session keys from prior user
+    Object.keys(localStorage).forEach(k => {
+      if (k.startsWith('student_profile_cache_') || k.startsWith('student_projects_') || k.startsWith('student_certs_') || k.startsWith('student_applications_') || k.startsWith('resume_score_') || k.startsWith('ai_match_rate_')) {
+        localStorage.removeItem(k);
+      }
+    });
+
     setCurrentUser(userData);
     localStorage.setItem('internmatch_user', JSON.stringify(userData));
     setActiveTab('dashboard');
@@ -47,6 +54,14 @@ export default function App() {
     setCurrentUser(null);
     localStorage.removeItem('internmatch_user');
     localStorage.removeItem('internmatch_tab');
+
+    // Wipe all identity-sensitive keys completely
+    Object.keys(localStorage).forEach(k => {
+      if (k.startsWith('student_profile_cache_') || k.startsWith('student_projects_') || k.startsWith('student_certs_') || k.startsWith('student_applications_') || k.startsWith('resume_score_') || k.startsWith('ai_match_rate_') || k.startsWith('profile_photo_')) {
+        localStorage.removeItem(k);
+      }
+    });
+
     setActiveTab('dashboard');
   };
 

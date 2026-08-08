@@ -2,6 +2,8 @@ package com.internmatch.student.service;
 
 import com.internmatch.student.repository.ApplicationRepository;
 import com.internmatch.student.repository.StudentProfileRepository;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 
@@ -10,6 +12,7 @@ import java.util.*;
 @Service
 public class StudentServiceImpl implements StudentService {
 
+    private static final Logger log = LoggerFactory.getLogger(StudentServiceImpl.class);
     private final StudentProfileRepository profileRepository;
     private final ApplicationRepository applicationRepository;
     private final JdbcTemplate jdbcTemplate;
@@ -23,6 +26,7 @@ public class StudentServiceImpl implements StudentService {
     }
 
     private Map<String, Object> normalizeMap(Map<String, Object> raw) {
+        if (raw == null) return Collections.emptyMap();
         Map<String, Object> norm = new HashMap<>(raw);
         for (Map.Entry<String, Object> entry : raw.entrySet()) {
             norm.put(entry.getKey().toLowerCase(), entry.getValue());
@@ -32,6 +36,7 @@ public class StudentServiceImpl implements StudentService {
     }
 
     private List<Map<String, Object>> normalizeList(List<Map<String, Object>> list) {
+        if (list == null) return Collections.emptyList();
         List<Map<String, Object>> res = new ArrayList<>();
         for (Map<String, Object> m : list) {
             res.add(normalizeMap(m));
@@ -41,8 +46,8 @@ public class StudentServiceImpl implements StudentService {
 
     @Override
     public Map<String, Object> getStudentDashboard(int studentId) {
-        Map<String, Object> profile = normalizeMap(profileRepository.findByUserId(studentId));
-        List<Map<String, Object>> apps = normalizeList(applicationRepository.findByStudentId(studentId));
+        Map<String, Object> profile = profileRepository.findByUserId(studentId);
+        List<Map<String, Object>> apps = applicationRepository.findByStudentId(studentId);
 
         int applied = apps.size();
         int inReview = 0;
@@ -62,47 +67,62 @@ public class StudentServiceImpl implements StudentService {
         res.put("in_review", inReview);
         res.put("shortlisted", shortlisted);
         res.put("offers_received", offers);
-        res.put("match_rate_percent", 94);
-        res.put("profile", profile);
-        res.put("recent_applications", apps);
+        res.put("profile", profile != null ? normalizeMap(profile) : Collections.emptyMap());
+        res.put("recent_applications", normalizeList(apps));
         return normalizeMap(res);
     }
 
     @Override
     public Map<String, Object> getStudentProfile(int studentId) {
-        return normalizeMap(profileRepository.findByUserId(studentId));
+        Map<String, Object> prof = profileRepository.findByUserId(studentId);
+        return prof != null ? normalizeMap(prof) : null;
     }
 
     @Override
     public Map<String, Object> updateStudentProfile(int studentId, Map<String, Object> body) {
-        String name = (String) body.getOrDefault("name", "Candidate");
+        if (studentId <= 0 || body == null) {
+            Map<String, Object> err = new HashMap<>();
+            err.put("success", false);
+            err.put("message", "Invalid student ID or request payload.");
+            return err;
+        }
+
+        String name = (String) body.getOrDefault("name", "");
         String college = (String) body.getOrDefault("college", "Karpagam College of Engineering");
-        int gradYear = body.containsKey("grad_year") ? ((Number) body.get("grad_year")).intValue() : 2026;
-        double cgpa = body.containsKey("cgpa") ? ((Number) body.get("cgpa")).doubleValue() : 8.5;
-        String address = (String) body.getOrDefault("address", (String) body.getOrDefault("location", "Thenkasi"));
-        String skills = (String) body.getOrDefault("skills", "React, Java, SQL, Python");
-        String leetcode = (String) body.getOrDefault("leetcode", "Thilak0329");
-        String github = (String) body.getOrDefault("github", "Thilak-29");
+        int gradYear = body.containsKey("grad_year") ? Integer.parseInt(body.get("grad_year").toString()) : 2026;
+        double cgpa = body.containsKey("cgpa") ? Double.parseDouble(body.get("cgpa").toString()) : 8.0;
+        String location = (String) body.getOrDefault("address", body.getOrDefault("location", ""));
+        String leetcode = (String) body.getOrDefault("leetcode", "");
+        String github = (String) body.getOrDefault("github", "");
         String yearOfStudy = (String) body.getOrDefault("year_of_study", "3rd Year");
         String degree = (String) body.getOrDefault("degree", "B.E.");
-        String branch = (String) body.getOrDefault("branch", "Computer Science & Engineering");
+        String branch = (String) body.getOrDefault("branch", body.getOrDefault("department", "Computer Science & Engineering"));
+        String gender = (String) body.getOrDefault("gender", "Prefer not to say");
+        String linkedin = (String) body.getOrDefault("linkedin", "");
+        String portfolio = (String) body.getOrDefault("portfolio", "");
+        String bio = (String) body.getOrDefault("bio", "");
+        String skills = (String) body.getOrDefault("skills", "");
 
-        try {
-            jdbcTemplate.update("UPDATE student_profiles SET name=?, college=?, grad_year=?, cgpa=?, address=?, skills=?, leetcode=?, github=?, year_of_study=?, degree=?, branch=? WHERE user_id=?",
-                    name, college, gradYear, cgpa, address, skills, leetcode, github, yearOfStudy, degree, branch, studentId);
-        } catch (Exception e) {}
+        profileRepository.updateProfile(studentId, name, college, gradYear, cgpa, location, leetcode, github, yearOfStudy, degree, branch, gender, linkedin, portfolio, bio, skills);
 
         Map<String, Object> resp = new HashMap<>();
         resp.put("success", true);
-        resp.put("message", "Profile updated successfully in Oracle DB");
+        resp.put("message", "Profile updated successfully in database");
         return resp;
     }
 
     @Override
     public Map<String, Object> uploadResume(int studentId, String fileName, String parsedText) {
+        if (studentId <= 0) {
+            Map<String, Object> err = new HashMap<>();
+            err.put("success", false);
+            return err;
+        }
         try {
-            jdbcTemplate.update("UPDATE student_profiles SET resume_file_name=? WHERE user_id=?", fileName, studentId);
-        } catch (Exception e) {}
+            jdbcTemplate.update("UPDATE student_profiles SET resume_file_name = ? WHERE user_id = ?", fileName, studentId);
+        } catch (Exception e) {
+            log.error("Error saving resume for student {}: {}", studentId, e.getMessage());
+        }
 
         Map<String, Object> resp = new HashMap<>();
         resp.put("success", true);
@@ -118,13 +138,19 @@ public class StudentServiceImpl implements StudentService {
 
     @Override
     public Map<String, Object> applyForInternship(int studentId, int internshipId) {
+        if (studentId <= 0 || internshipId <= 0) {
+            Map<String, Object> err = new HashMap<>();
+            err.put("success", false);
+            err.put("message", "Invalid student ID or internship ID");
+            return err;
+        }
+
         Map<String, Object> profile = profileRepository.findByUserId(studentId);
-        String studentName = (String) (profile.get("name") != null ? profile.get("name") : profile.get("NAME"));
-        if (studentName == null) studentName = "Candidate";
+        String studentName = profile != null && profile.get("name") != null ? profile.get("name").toString() : "Candidate";
 
         String compName = "Company";
-        String roleTitle = "Software Intern";
-        int companyId = 10;
+        String roleTitle = "Software Engineering Intern";
+        int companyId = 0;
 
         try {
             List<Map<String, Object>> jobRows = jdbcTemplate.queryForList("SELECT company_id, company_name, title FROM internships WHERE id = ?", internshipId);
@@ -134,13 +160,15 @@ public class StudentServiceImpl implements StudentService {
                 compName = (String) (j.get("company_name") != null ? j.get("company_name") : j.get("COMPANY_NAME"));
                 roleTitle = (String) (j.get("title") != null ? j.get("title") : j.get("TITLE"));
             }
-        } catch (Exception e) {}
+        } catch (Exception e) {
+            log.error("Error fetching internship details for {}: {}", internshipId, e.getMessage());
+        }
 
         applicationRepository.saveApplication(studentId, internshipId, companyId, studentName, compName, roleTitle);
 
         Map<String, Object> resp = new HashMap<>();
         resp.put("success", true);
-        resp.put("message", "Application submitted successfully to Oracle Database");
+        resp.put("message", "Application submitted successfully to database");
         return resp;
     }
 
@@ -166,9 +194,11 @@ public class StudentServiceImpl implements StudentService {
 
     @Override
     public List<Map<String, Object>> getNotifications(int studentId) {
+        if (studentId <= 0) return Collections.emptyList();
         try {
             return normalizeList(jdbcTemplate.queryForList("SELECT * FROM notifications WHERE user_id = ? ORDER BY id DESC", studentId));
         } catch (Exception e) {
+            log.error("Error fetching notifications for student {}: {}", studentId, e.getMessage());
             return Collections.emptyList();
         }
     }
@@ -177,7 +207,9 @@ public class StudentServiceImpl implements StudentService {
     public Map<String, Object> markNotificationRead(int id) {
         try {
             jdbcTemplate.update("UPDATE notifications SET is_read = 1 WHERE id = ?", id);
-        } catch (Exception e) {}
+        } catch (Exception e) {
+            log.error("Error marking notification read {}: {}", id, e.getMessage());
+        }
 
         Map<String, Object> resp = new HashMap<>();
         resp.put("success", true);

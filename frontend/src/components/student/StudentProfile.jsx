@@ -1,53 +1,40 @@
 import React, { useState, useEffect } from 'react';
-import { User, BookOpen, Code, FolderGit2, Award, X, Plus, Edit3, Save, Camera, Trash2, ExternalLink, CheckCircle } from 'lucide-react';
+import { User, BookOpen, Code, FolderGit2, Award, X, Plus, Edit3, Save, Camera, Trash2, ExternalLink, CheckCircle, AlertCircle, Sparkles } from 'lucide-react';
 
 export default function StudentProfile({ apiBaseUrl = 'http://localhost:8082', currentUser }) {
-  const userId = currentUser?.userId || currentUser?.user_id || currentUser?.ID || currentUser?.id || 3;
+  const userId = currentUser?.userId || currentUser?.user_id || currentUser?.ID || currentUser?.id;
+
+  if (!userId) {
+    return (
+      <div className="glass-card" style={{ padding: '36px', textAlign: 'center', color: '#DC2626' }}>
+        <AlertCircle size={32} style={{ margin: '0 auto 12px auto' }} />
+        <h3>Session Authentication Error</h3>
+        <p style={{ fontSize: '0.85rem', marginTop: '6px' }}>
+          Unable to identify authenticated user ID. Please sign out and sign in again.
+        </p>
+      </div>
+    );
+  }
 
   const [isEditing, setIsEditing] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
   const [profilePhoto, setProfilePhoto] = useState(() => {
     return localStorage.getItem(`profile_photo_${userId}`) || '';
   });
 
-  const [profile, setProfile] = useState(() => {
-    const cached = localStorage.getItem(`student_profile_cache_${userId}`);
-    if (cached) {
-      try { return JSON.parse(cached); } catch (e) {}
-    }
-    return {
-      name: currentUser?.name || currentUser?.NAME || 'Vignesh Sankarakumar',
-      email: currentUser?.email || currentUser?.EMAIL || 'demo1@gmail.com',
-      phone: '741085293',
-      dob: '2007-03-14',
-      gender: 'Male',
-      address: 'Thenkasi',
-      college: currentUser?.college || currentUser?.COLLEGE || 'Karpagam College of Engineering',
-      degree: currentUser?.degree || currentUser?.DEGREE || 'B.E.',
-      branch: currentUser?.department || currentUser?.branch || currentUser?.BRANCH || 'Computer Science & Engineering',
-      year_of_study: currentUser?.year_of_study || currentUser?.YEAR_OF_STUDY || '3rd Year',
-      cgpa: currentUser?.cgpa || currentUser?.CGPA || 8.5,
-      grad_year: currentUser?.grad_year || currentUser?.GRAD_YEAR || 2026,
-      github: currentUser?.github || currentUser?.GITHUB || 'Thilak-29',
-      leetcode: currentUser?.leetcode || currentUser?.LEETCODE || 'Thilak0329',
-      linkedin: 'https://linkedin.com/in/thilak-p',
-      portfolio: 'https://protfolio-sfpa.vercel.app/',
-      bio: 'Software Developer | Java | Full Stack | DSA | Open to internship opportunities.'
-    };
-  });
+  const [profile, setProfile] = useState(null);
 
-  const [leetCodeStats, setLeetCodeStats] = useState({ solvedCount: 120, easy: 81, medium: 37, hard: 2, ranking: 1385755 });
-  const [gitHubStats, setGitHubStats] = useState({ publicRepos: 8, followers: 0, bio: '' });
+  const [leetCodeStats, setLeetCodeStats] = useState({ solvedCount: 0, easy: 0, medium: 0, hard: 0, ranking: 0 });
+  const [gitHubStats, setGitHubStats] = useState({ publicRepos: 0, followers: 0, bio: '' });
 
-  const [skills, setSkills] = useState(['React', 'Java', 'SQL', 'Python']);
+  const [skills, setSkills] = useState([]);
   const [projects, setProjects] = useState(() => {
     const cached = localStorage.getItem(`student_projects_${userId}`);
-    return cached ? JSON.parse(cached) : [
-      { title: 'InternMatch AI Platform', desc: 'AI-driven candidate recruitment platform with real-time LeetCode synchronization and proctored coding assessments.', tech: 'React, Java, Spring Boot, Oracle Database', duration: '2 Months' }
-    ];
+    return cached ? JSON.parse(cached) : [];
   });
   const [certs, setCerts] = useState(() => {
     const cached = localStorage.getItem(`student_certs_${userId}`);
-    return cached ? JSON.parse(cached) : ['Oracle Database SQL Certified Associate', 'AWS Certified Cloud Practitioner'];
+    return cached ? JSON.parse(cached) : [];
   });
 
   const [showAddProject, setShowAddProject] = useState(false);
@@ -58,7 +45,6 @@ export default function StudentProfile({ apiBaseUrl = 'http://localhost:8082', c
 
   const [showAddCert, setShowAddCert] = useState(false);
   const [newCertTitle, setNewCertTitle] = useState('');
-
   const [saveStatus, setSaveStatus] = useState('');
 
   useEffect(() => {
@@ -66,164 +52,183 @@ export default function StudentProfile({ apiBaseUrl = 'http://localhost:8082', c
   }, [userId]);
 
   const fetchLiveProfile = async () => {
+    setIsLoading(true);
     const endpoints = [
       `${apiBaseUrl}/api/v1/student/${userId}/profile`,
       `http://localhost:8082/api/v1/student/${userId}/profile`,
       `http://localhost:8000/api/v1/student/${userId}/profile`
     ];
 
+    let foundProfile = null;
     for (const url of endpoints) {
       try {
         const res = await fetch(url);
         if (res.ok) {
           const data = await res.json();
-          const updated = {
-            name: data.name || data.NAME || profile.name,
-            email: data.email || data.EMAIL || profile.email,
-            phone: data.phone || data.PHONE || profile.phone,
-            dob: data.dob || data.DOB || profile.dob,
-            gender: data.gender || data.GENDER || profile.gender,
-            address: data.address || data.ADDRESS || data.location || profile.address,
-            college: data.college || data.COLLEGE || profile.college,
-            degree: data.degree || data.DEGREE || profile.degree,
-            branch: data.branch || data.BRANCH || profile.branch,
-            year_of_study: data.year_of_study || data.YEAR_OF_STUDY || profile.year_of_study,
-            cgpa: data.cgpa || data.CGPA || profile.cgpa,
-            grad_year: data.grad_year || data.GRAD_YEAR || profile.grad_year,
-            github: data.github || data.GITHUB || profile.github,
-            leetcode: data.leetcode || data.LEETCODE || profile.leetcode,
-            linkedin: data.linkedin || data.LINKEDIN || profile.linkedin,
-            portfolio: data.portfolio || data.PORTFOLIO || profile.portfolio,
-            bio: data.bio || data.BIO || profile.bio
-          };
+          if (data && (data.user_id || data.USER_ID || data.name || data.NAME)) {
+            foundProfile = {
+              name: data.name || data.NAME || data.user_name || currentUser?.name || '',
+              email: data.email || data.EMAIL || data.user_email || currentUser?.email || '',
+              phone: data.phone || data.PHONE || '',
+              dob: data.dob || data.DOB || '',
+              gender: data.gender || data.GENDER || 'Prefer not to say',
+              address: data.address || data.ADDRESS || data.location || data.LOCATION || '',
+              college: data.college || data.COLLEGE || 'Karpagam College of Engineering',
+              degree: data.degree || data.DEGREE || 'B.E.',
+              branch: data.branch || data.BRANCH || data.department || data.DEPARTMENT || 'Computer Science & Engineering',
+              year_of_study: data.year_of_study || data.YEAR_OF_STUDY || '3rd Year',
+              cgpa: data.cgpa || data.CGPA || (currentUser?.cgpa || 8.0),
+              grad_year: data.grad_year || data.GRAD_YEAR || (currentUser?.grad_year || 2026),
+              github: data.github || data.GITHUB || (currentUser?.github || ''),
+              leetcode: data.leetcode || data.LEETCODE || (currentUser?.leetcode || ''),
+              linkedin: data.linkedin || data.LINKEDIN || (currentUser?.linkedin || ''),
+              portfolio: data.portfolio || data.PORTFOLIO || (currentUser?.portfolio || ''),
+              bio: data.bio || data.BIO || ''
+            };
 
-          setProfile(updated);
-          localStorage.setItem(`student_profile_cache_${userId}`, JSON.stringify(updated));
+            const skStr = data.skills || data.SKILLS || currentUser?.skills || '';
+            if (skStr) {
+              setSkills(skStr.split(',').map(s => s.trim()).filter(Boolean));
+            }
 
-          const rawSkills = data.skills || data.SKILLS;
-          if (rawSkills && typeof rawSkills === 'string' && rawSkills.trim().length > 0) {
-            setSkills(rawSkills.split(',').map(s => s.trim()).filter(Boolean));
+            if (foundProfile.leetcode) {
+              fetchLeetCode(foundProfile.leetcode);
+            }
+            if (foundProfile.github) {
+              fetchGitHub(foundProfile.github);
+            }
+            break;
           }
-
-          fetchGitHub(updated.github);
-          fetchLeetCode(updated.leetcode);
-          return;
         }
-      } catch (err) {}
+      } catch (err) {
+        console.error("Profile fetch error:", err);
+      }
     }
 
-    fetchGitHub(profile.github);
-    fetchLeetCode(profile.leetcode);
+    if (foundProfile) {
+      setProfile(foundProfile);
+      localStorage.setItem(`student_profile_cache_${userId}`, JSON.stringify(foundProfile));
+    } else {
+      // Initialize clean profile for newly registered student
+      const initial = {
+        name: currentUser?.name || '',
+        email: currentUser?.email || '',
+        phone: '',
+        dob: '',
+        gender: 'Prefer not to say',
+        address: currentUser?.location || '',
+        college: currentUser?.college || 'Karpagam College of Engineering',
+        degree: currentUser?.degree || 'B.E.',
+        branch: currentUser?.department || currentUser?.branch || 'Computer Science & Engineering',
+        year_of_study: currentUser?.year_of_study || '3rd Year',
+        cgpa: currentUser?.cgpa || 8.0,
+        grad_year: currentUser?.grad_year || 2026,
+        github: currentUser?.github || '',
+        leetcode: currentUser?.leetcode || '',
+        linkedin: currentUser?.linkedin || '',
+        portfolio: currentUser?.portfolio || '',
+        bio: ''
+      };
+      setProfile(initial);
+      if (currentUser?.skills) {
+        setSkills(currentUser.skills.split(',').map(s => s.trim()).filter(Boolean));
+      }
+    }
+
+    setIsLoading(false);
   };
 
-  const fetchGitHub = async (ghHandle) => {
-    if (!ghHandle) return;
+  const fetchLeetCode = async (username) => {
+    if (!username) return;
     try {
-      const res = await fetch(`https://api.github.com/users/${ghHandle}`);
+      const res = await fetch(`http://localhost:8084/api/v1/external/leetcode/${username}`);
+      if (res.ok) {
+        const data = await res.json();
+        setLeetCodeStats({
+          solvedCount: data.solvedCount || 120,
+          easy: data.easySolved || 81,
+          medium: data.mediumSolved || 37,
+          hard: data.hardSolved || 2,
+          ranking: data.ranking || 1385755
+        });
+      }
+    } catch (e) {}
+  };
+
+  const fetchGitHub = async (username) => {
+    if (!username) return;
+    try {
+      const res = await fetch(`http://localhost:8084/api/v1/external/github/${username}`);
       if (res.ok) {
         const data = await res.json();
         setGitHubStats({
-          publicRepos: data.public_repos !== undefined ? data.public_repos : 8,
+          publicRepos: data.publicRepos || 8,
           followers: data.followers || 0,
           bio: data.bio || ''
         });
       }
-    } catch (e) {
-      setGitHubStats({ publicRepos: 8, followers: 0, bio: '' });
-    }
+    } catch (e) {}
   };
 
-  const fetchLeetCode = async (lcHandle) => {
-    if (!lcHandle) return;
-    try {
-      const res = await fetch(`https://leetcode-api-faisalshohag.vercel.app/${lcHandle}`);
-      if (res.ok) {
-        const data = await res.json();
-        if (data && data.totalSolved !== undefined) {
-          setLeetCodeStats({
-            solvedCount: data.totalSolved,
-            easy: data.easySolved || 81,
-            medium: data.mediumSolved || 37,
-            hard: data.hardSolved || 2,
-            ranking: data.ranking || 1385755
-          });
-          return;
-        }
-      }
-    } catch (e) {}
+  const handleProfileChange = (field, value) => {
+    setProfile(prev => ({ ...prev, [field]: value }));
+  };
 
-    setLeetCodeStats({
-      solvedCount: 120,
-      easy: 81,
-      medium: 37,
-      hard: 2,
-      ranking: 1385755
-    });
+  const handleSaveProfile = async () => {
+    setSaveStatus('Saving profile to database...');
+    const payload = {
+      ...profile,
+      skills: skills.join(', ')
+    };
+
+    const endpoints = [
+      `${apiBaseUrl}/api/v1/student/${userId}/profile`,
+      `http://localhost:8082/api/v1/student/${userId}/profile`,
+      `http://localhost:8000/api/v1/student/${userId}/profile`
+    ];
+
+    let saved = false;
+    for (const url of endpoints) {
+      try {
+        const res = await fetch(url, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+
+        if (res.ok) {
+          saved = true;
+          break;
+        }
+      } catch (e) {
+        console.error("Save profile error:", e);
+      }
+    }
+
+    localStorage.setItem(`student_profile_cache_${userId}`, JSON.stringify(profile));
+    localStorage.setItem(`student_projects_${userId}`, JSON.stringify(projects));
+    localStorage.setItem(`student_certs_${userId}`, JSON.stringify(certs));
+
+    setIsEditing(false);
+    setSaveStatus(saved ? '✓ Profile saved successfully to database!' : '✓ Profile updated locally.');
+    setTimeout(() => setSaveStatus(''), 4000);
   };
 
   const handlePhotoUpload = (e) => {
-    const file = e.target.files[0];
+    const file = e.target.files ? e.target.files[0] : null;
     if (file) {
       const reader = new FileReader();
       reader.onloadend = () => {
         setProfilePhoto(reader.result);
         localStorage.setItem(`profile_photo_${userId}`, reader.result);
-        setSaveStatus('Profile photo updated & saved!');
-        setTimeout(() => setSaveStatus(''), 3000);
       };
       reader.readAsDataURL(file);
     }
   };
 
-  const ALL_SKILLS = [
-    'React', 'React Native', 'Redux', 'Responsive Design', 'REST API',
-    'Python', 'PyTorch', 'Pandas',
-    'Java', 'Spring Boot', 'Spring Security',
-    'SQL', 'Oracle Database', 'MySQL', 'PostgreSQL',
-    'FastAPI', 'Node.js', 'Express',
-    'Tailwind CSS', 'TypeScript', 'Docker', 'AWS'
-  ];
-
-  const [skillInput, setSkillInput] = useState('');
-  const [suggestions, setSuggestions] = useState([]);
-
-  const handleSkillInputChange = (e) => {
-    const val = e.target.value;
-    setSkillInput(val);
-    if (val.trim().length > 0) {
-      const matches = ALL_SKILLS.filter(s => s.toLowerCase().startsWith(val.toLowerCase()) && !skills.includes(s));
-      setSuggestions(matches);
-    } else {
-      setSuggestions([]);
-    }
-  };
-
-  const addSkill = (skillName) => {
-    if (!skills.includes(skillName)) {
-      const updated = [...skills, skillName];
-      setSkills(updated);
-      saveProfileToOracle({ ...profile, skills: updated.join(', ') });
-    }
-    setSkillInput('');
-    setSuggestions([]);
-  };
-
-  const removeSkill = (skillToRemove) => {
-    const updated = skills.filter(s => s !== skillToRemove);
-    setSkills(updated);
-    saveProfileToOracle({ ...profile, skills: updated.join(', ') });
-  };
-
-  const handleAddProject = (e) => {
-    e.preventDefault();
-    if (!newProjTitle.trim()) return;
-    const newProj = {
-      title: newProjTitle,
-      desc: newProjDesc,
-      tech: newProjTech,
-      duration: newProjDuration || '1 Month'
-    };
-    const updated = [...projects, newProj];
+  const handleAddProject = () => {
+    if (!newProjTitle) return;
+    const updated = [...projects, { title: newProjTitle, desc: newProjDesc, tech: newProjTech, duration: newProjDuration || '1 Month' }];
     setProjects(updated);
     localStorage.setItem(`student_projects_${userId}`, JSON.stringify(updated));
     setNewProjTitle('');
@@ -231,422 +236,353 @@ export default function StudentProfile({ apiBaseUrl = 'http://localhost:8082', c
     setNewProjTech('');
     setNewProjDuration('');
     setShowAddProject(false);
-    setSaveStatus('Project saved successfully!');
-    setTimeout(() => setSaveStatus(''), 3000);
   };
 
-  const handleDeleteProject = (indexToDelete) => {
-    const updated = projects.filter((_, idx) => idx !== indexToDelete);
+  const handleRemoveProject = (index) => {
+    const updated = projects.filter((_, i) => i !== index);
     setProjects(updated);
     localStorage.setItem(`student_projects_${userId}`, JSON.stringify(updated));
   };
 
-  const handleAddCert = (e) => {
-    e.preventDefault();
-    if (!newCertTitle.trim()) return;
-    const updated = [...certs, newCertTitle.trim()];
+  const handleAddCert = () => {
+    if (!newCertTitle) return;
+    const updated = [...certs, newCertTitle];
     setCerts(updated);
     localStorage.setItem(`student_certs_${userId}`, JSON.stringify(updated));
     setNewCertTitle('');
     setShowAddCert(false);
-    setSaveStatus('Certification added!');
-    setTimeout(() => setSaveStatus(''), 3000);
   };
 
-  const handleDeleteCert = (indexToDelete) => {
-    const updated = certs.filter((_, idx) => idx !== indexToDelete);
+  const handleRemoveCert = (index) => {
+    const updated = certs.filter((_, i) => i !== index);
     setCerts(updated);
     localStorage.setItem(`student_certs_${userId}`, JSON.stringify(updated));
   };
 
-  const handleSaveModal = async (e) => {
-    e.preventDefault();
-    setIsEditing(false);
-    await saveProfileToOracle(profile);
-    fetchGitHub(profile.github);
-    fetchLeetCode(profile.leetcode);
-  };
-
-  const saveProfileToOracle = async (profileData) => {
-    localStorage.setItem(`student_profile_cache_${userId}`, JSON.stringify(profileData));
-    setSaveStatus('Saving profile to Oracle Database...');
-
-    const endpoints = [
-      `${apiBaseUrl}/api/v1/student/${userId}/profile`,
-      `http://localhost:8082/api/v1/student/${userId}/profile`,
-      `http://localhost:8000/api/v1/student/${userId}/profile`
-    ];
-
-    for (const url of endpoints) {
-      try {
-        const res = await fetch(url, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            ...profileData,
-            skills: skills.join(', ')
-          })
-        });
-        if (res.ok) {
-          setSaveStatus('Profile updated and saved to Oracle Database!');
-          setTimeout(() => setSaveStatus(''), 4000);
-          return;
-        }
-      } catch (e) {}
-    }
-
-    setSaveStatus('Profile updated and synchronized successfully!');
-    setTimeout(() => setSaveStatus(''), 4000);
-  };
+  if (isLoading || !profile) {
+    return (
+      <div className="glass-card" style={{ padding: '48px', textAlign: 'center', color: 'var(--text-muted)' }}>
+        Loading student profile from database...
+      </div>
+    );
+  }
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '28px', maxWidth: '1000px', margin: '0 auto' }}>
-      {saveStatus && (
-        <div style={{ padding: '12px 18px', background: '#DCFCE7', border: '1px solid #86EFAC', color: '#166534', borderRadius: '8px', fontSize: '0.9rem', fontWeight: 600 }}>
-          ✓ {saveStatus}
-        </div>
-      )}
-
-      {/* Top Profile Header Card */}
-      <div className="glass-card" style={{ padding: '32px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '20px' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '24px', maxWidth: '1100px', margin: '0 auto' }}>
+      {/* Header Profile Card */}
+      <div className="glass-card" style={{ padding: '28px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '20px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
           <div style={{ position: 'relative' }}>
-            <div style={{ width: '84px', height: '84px', borderRadius: '50%', background: '#EFF6FF', border: '3px solid #2563EB', overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <div style={{ width: '84px', height: '84px', borderRadius: '50%', background: '#EFF6FF', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '3px solid #BFDBFE', overflow: 'hidden' }}>
               {profilePhoto ? (
                 <img src={profilePhoto} alt="Profile" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
               ) : (
-                <User size={44} color="#2563EB" />
+                <User size={40} color="#2563EB" />
               )}
             </div>
-            <label style={{ position: 'absolute', bottom: 0, right: 0, width: '28px', height: '28px', borderRadius: '50%', background: '#2563EB', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', boxShadow: '0 2px 4px rgba(0,0,0,0.2)' }}>
-              <Camera size={14} color="#FFFFFF" />
-              <input type="file" accept="image/*" onChange={handlePhotoUpload} style={{ display: 'none' }} />
-            </label>
+            {isEditing && (
+              <label style={{ position: 'absolute', bottom: 0, right: 0, background: '#2563EB', color: '#FFFFFF', padding: '4px', borderRadius: '50%', cursor: 'pointer' }}>
+                <Camera size={14} />
+                <input type="file" accept="image/*" onChange={handlePhotoUpload} style={{ display: 'none' }} />
+              </label>
+            )}
           </div>
 
           <div>
-            <h1 style={{ fontSize: '1.6rem', fontWeight: 800, color: 'var(--text-main)' }}>{profile.name}</h1>
-            <p style={{ fontSize: '0.88rem', color: 'var(--text-muted)', marginTop: '2px' }}>
-              {profile.degree} in {profile.branch} • {profile.college}
-            </p>
-            <div style={{ display: 'flex', gap: '10px', marginTop: '10px', flexWrap: 'wrap' }}>
-              <span className="badge badge-auth" style={{ padding: '4px 10px', fontSize: '0.78rem', fontWeight: 700 }}>
-                &lt;&gt; LeetCode Solved: {leetCodeStats.solvedCount}
-              </span>
-              <span className="badge badge-auth" style={{ padding: '4px 10px', fontSize: '0.78rem', fontWeight: 700 }}>
-                GitHub Repos: {gitHubStats.publicRepos}
-              </span>
+            <h1 style={{ fontSize: '1.45rem', fontWeight: 800, color: 'var(--text-main)' }}>
+              {profile.name || 'Candidate Profile'}
+            </h1>
+            <div style={{ fontSize: '0.85rem', color: '#2563EB', fontWeight: 600 }}>
+              {profile.degree} in {profile.branch} • <span style={{ color: 'var(--text-muted)' }}>{profile.college}</span>
+            </div>
+            <div style={{ display: 'flex', gap: '12px', fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '4px' }}>
+              <span>📍 {profile.address || 'Location Not Set'}</span>
+              <span>🎓 Grad: {profile.grad_year}</span>
+              <span>📊 CGPA: {profile.cgpa} / 10</span>
             </div>
           </div>
         </div>
 
-        <button onClick={() => setIsEditing(true)} className="btn-primary" style={{ padding: '10px 18px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <Edit3 size={16} /> Edit Profile Details
-        </button>
-      </div>
-
-      {/* Personal Information */}
-      <div className="glass-card" style={{ padding: '28px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '20px', color: '#2563EB', fontWeight: 700 }}>
-          <User size={18} /> Personal Information (College Oracle DB Record)
-        </div>
-
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '18px', fontSize: '0.88rem' }}>
-          <div>
-            <span style={{ color: 'var(--text-muted)', display: 'block', fontSize: '0.75rem', fontWeight: 700 }}>FULL NAME</span>
-            <strong style={{ color: 'var(--text-main)' }}>{profile.name}</strong>
-          </div>
-          <div>
-            <span style={{ color: 'var(--text-muted)', display: 'block', fontSize: '0.75rem', fontWeight: 700 }}>EMAIL ADDRESS</span>
-            <strong style={{ color: 'var(--text-main)' }}>{profile.email}</strong>
-          </div>
-          <div>
-            <span style={{ color: 'var(--text-muted)', display: 'block', fontSize: '0.75rem', fontWeight: 700 }}>PHONE</span>
-            <strong style={{ color: 'var(--text-main)' }}>{profile.phone}</strong>
-          </div>
-          <div>
-            <span style={{ color: 'var(--text-muted)', display: 'block', fontSize: '0.75rem', fontWeight: 700 }}>GENDER</span>
-            <strong style={{ color: 'var(--text-main)' }}>{profile.gender}</strong>
-          </div>
-          <div>
-            <span style={{ color: 'var(--text-muted)', display: 'block', fontSize: '0.75rem', fontWeight: 700 }}>DATE OF BIRTH</span>
-            <strong style={{ color: 'var(--text-main)' }}>{profile.dob}</strong>
-          </div>
-          <div>
-            <span style={{ color: 'var(--text-muted)', display: 'block', fontSize: '0.75rem', fontWeight: 700 }}>LOCATION</span>
-            <strong style={{ color: 'var(--text-main)' }}>{profile.address}</strong>
-          </div>
-        </div>
-      </div>
-
-      {/* Academic Information */}
-      <div className="glass-card" style={{ padding: '28px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '20px', color: '#7C3AED', fontWeight: 700 }}>
-          <BookOpen size={18} /> Academic Information
-        </div>
-
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '18px', fontSize: '0.88rem' }}>
-          <div>
-            <span style={{ color: 'var(--text-muted)', display: 'block', fontSize: '0.75rem', fontWeight: 700 }}>COLLEGE / INSTITUTION</span>
-            <strong style={{ color: 'var(--text-main)' }}>{profile.college}</strong>
-          </div>
-          <div>
-            <span style={{ color: 'var(--text-muted)', display: 'block', fontSize: '0.75rem', fontWeight: 700 }}>DEGREE & BRANCH</span>
-            <strong style={{ color: 'var(--text-main)' }}>{profile.degree} - {profile.branch}</strong>
-          </div>
-          <div>
-            <span style={{ color: 'var(--text-muted)', display: 'block', fontSize: '0.75rem', fontWeight: 700 }}>YEAR OF STUDY</span>
-            <strong style={{ color: 'var(--text-main)' }}>{profile.year_of_study}</strong>
-          </div>
-          <div>
-            <span style={{ color: 'var(--text-muted)', display: 'block', fontSize: '0.75rem', fontWeight: 700 }}>CGPA</span>
-            <strong style={{ color: 'var(--text-main)' }}>{profile.cgpa} / 10</strong>
-          </div>
-          <div>
-            <span style={{ color: 'var(--text-muted)', display: 'block', fontSize: '0.75rem', fontWeight: 700 }}>GRADUATION YEAR</span>
-            <strong style={{ color: 'var(--text-main)' }}>{profile.grad_year}</strong>
-          </div>
-        </div>
-      </div>
-
-      {/* Developer Profiles & Live API Handles */}
-      <div className="glass-card" style={{ padding: '28px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '20px', color: '#D97706', fontWeight: 700 }}>
-          <Code size={18} /> Developer Profiles & Live API Handles
-        </div>
-
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '18px', fontSize: '0.88rem' }}>
-          <div>
-            <span style={{ color: 'var(--text-muted)', display: 'block', fontSize: '0.75rem', fontWeight: 700 }}>LEETCODE USERNAME</span>
-            <strong style={{ color: '#D97706' }}>{profile.leetcode}</strong>
-            <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '2px' }}>
-              Easy: {leetCodeStats.easy} • Med: {leetCodeStats.medium} • Hard: {leetCodeStats.hard}
-            </div>
-          </div>
-          <div>
-            <span style={{ color: 'var(--text-muted)', display: 'block', fontSize: '0.75rem', fontWeight: 700 }}>GITHUB USERNAME</span>
-            <strong style={{ color: 'var(--text-main)' }}>{profile.github}</strong>
-            <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '2px' }}>
-              Public Repositories: {gitHubStats.publicRepos}
-            </div>
-          </div>
-          <div>
-            <span style={{ color: 'var(--text-muted)', display: 'block', fontSize: '0.75rem', fontWeight: 700 }}>PORTFOLIO URL</span>
-            <a href={profile.portfolio} target="_blank" rel="noreferrer" style={{ color: '#2563EB', fontWeight: 600 }}>{profile.portfolio}</a>
-          </div>
-          <div>
-            <span style={{ color: 'var(--text-muted)', display: 'block', fontSize: '0.75rem', fontWeight: 700 }}>LINKEDIN URL</span>
-            <a href={profile.linkedin} target="_blank" rel="noreferrer" style={{ color: '#2563EB', fontWeight: 600 }}>{profile.linkedin}</a>
-          </div>
-        </div>
-      </div>
-
-      {/* Verified Skills */}
-      <div className="glass-card" style={{ padding: '28px' }}>
-        <h3 style={{ fontSize: '1.1rem', fontWeight: 700, color: 'var(--text-main)', marginBottom: '14px' }}>
-          Verified Technical Skills
-        </h3>
-
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginBottom: '16px' }}>
-          {skills.map((skill, idx) => (
-            <span key={idx} className="badge badge-ai" style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '6px 12px' }}>
-              {skill}
-              <X size={13} onClick={() => removeSkill(skill)} style={{ cursor: 'pointer' }} />
-            </span>
-          ))}
-        </div>
-
-        <div style={{ display: 'flex', gap: '10px', maxWidth: '400px', position: 'relative' }}>
-          <input
-            type="text"
-            className="input-field"
-            placeholder="Add new skill (e.g. React, Java, Docker)..."
-            value={skillInput}
-            onChange={handleSkillInputChange}
-            onKeyDown={(e) => { if (e.key === 'Enter' && skillInput.trim()) { e.preventDefault(); addSkill(skillInput.trim()); } }}
-          />
-          <button type="button" onClick={() => { if (skillInput.trim()) addSkill(skillInput.trim()); }} className="btn-secondary" style={{ padding: '0 16px' }}>
-            <Plus size={16} />
-          </button>
-
-          {suggestions.length > 0 && (
-            <div style={{ position: 'absolute', top: '100%', left: 0, right: '50px', background: '#FFFFFF', border: '1px solid var(--border-light)', borderRadius: '8px', marginTop: '4px', zIndex: 10, boxShadow: '0 4px 6px rgba(0,0,0,0.1)' }}>
-              {suggestions.map((s, idx) => (
-                <div key={idx} onClick={() => addSkill(s)} style={{ padding: '8px 12px', cursor: 'pointer', fontSize: '0.85rem' }}>
-                  {s}
-                </div>
-              ))}
-            </div>
+        <div style={{ display: 'flex', gap: '10px' }}>
+          {isEditing ? (
+            <button onClick={handleSaveProfile} className="btn-primary" style={{ padding: '8px 18px', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <Save size={16} /> Save Profile
+            </button>
+          ) : (
+            <button onClick={() => setIsEditing(true)} className="btn-secondary" style={{ padding: '8px 18px', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <Edit3 size={16} /> Edit Profile
+            </button>
           )}
         </div>
       </div>
 
-      {/* Projects */}
-      <div className="glass-card" style={{ padding: '28px' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#059669', fontWeight: 700 }}>
-            <FolderGit2 size={18} /> Projects
-          </div>
-          <button onClick={() => setShowAddProject(!showAddProject)} className="btn-secondary" style={{ padding: '6px 12px', fontSize: '0.8rem' }}>
-            <Plus size={14} /> Add Project
-          </button>
-        </div>
-
-        {showAddProject && (
-          <form onSubmit={handleAddProject} style={{ padding: '16px', background: '#F8FAFC', borderRadius: '8px', border: '1px solid var(--border-light)', marginBottom: '16px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
-            <input type="text" required placeholder="Project Title" className="input-field" value={newProjTitle} onChange={(e) => setNewProjTitle(e.target.value)} />
-            <textarea required placeholder="Project Description" className="input-field" rows={2} value={newProjDesc} onChange={(e) => setNewProjDesc(e.target.value)} />
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
-              <input type="text" placeholder="Tech Stack (e.g. React, Java)" className="input-field" value={newProjTech} onChange={(e) => setNewProjTech(e.target.value)} />
-              <input type="text" placeholder="Duration (e.g. 2 Months)" className="input-field" value={newProjDuration} onChange={(e) => setNewProjDuration(e.target.value)} />
-            </div>
-            <button type="submit" className="btn-primary" style={{ alignSelf: 'flex-start', padding: '8px 16px', fontSize: '0.82rem' }}>
-              Save Project
-            </button>
-          </form>
-        )}
-
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-          {projects.map((proj, idx) => (
-            <div key={idx} style={{ padding: '16px', border: '1px solid var(--border-light)', borderRadius: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <div>
-                <h4 style={{ fontSize: '0.95rem', fontWeight: 700, color: 'var(--text-main)' }}>{proj.title}</h4>
-                <p style={{ fontSize: '0.82rem', color: 'var(--text-muted)', marginTop: '2px' }}>{proj.desc}</p>
-                <div style={{ fontSize: '0.78rem', color: '#2563EB', fontWeight: 600, marginTop: '4px' }}>
-                  {proj.tech} • {proj.duration}
-                </div>
-              </div>
-              <button onClick={() => handleDeleteProject(idx)} className="btn-ghost" style={{ color: '#DC2626' }}>
-                <Trash2 size={16} />
-              </button>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {/* Certifications */}
-      <div className="glass-card" style={{ padding: '28px' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#7C3AED', fontWeight: 700 }}>
-            <Award size={18} /> Certifications
-          </div>
-          <button onClick={() => setShowAddCert(!showAddCert)} className="btn-secondary" style={{ padding: '6px 12px', fontSize: '0.8rem' }}>
-            <Plus size={14} /> Add Certification
-          </button>
-        </div>
-
-        {showAddCert && (
-          <form onSubmit={handleAddCert} style={{ padding: '16px', background: '#F8FAFC', borderRadius: '8px', border: '1px solid var(--border-light)', marginBottom: '16px', display: 'flex', gap: '10px' }}>
-            <input type="text" required placeholder="Certification Title (e.g. Oracle Database Certified)" className="input-field" value={newCertTitle} onChange={(e) => setNewCertTitle(e.target.value)} style={{ flex: 1 }} />
-            <button type="submit" className="btn-primary" style={{ padding: '8px 16px', fontSize: '0.82rem' }}>
-              Add
-            </button>
-          </form>
-        )}
-
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-          {certs.map((cert, idx) => (
-            <div key={idx} style={{ padding: '12px 16px', border: '1px solid var(--border-light)', borderRadius: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <span style={{ fontSize: '0.88rem', fontWeight: 600, color: 'var(--text-main)' }}>{cert}</span>
-              <button onClick={() => handleDeleteCert(idx)} className="btn-ghost" style={{ color: '#DC2626' }}>
-                <Trash2 size={15} />
-              </button>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {/* Edit Profile Details Modal */}
-      {isEditing && (
-        <div style={{ position: 'fixed', inset: 0, zIndex: 1000, background: 'rgba(15,23,42,0.5)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
-          <div className="glass-card" style={{ background: '#FFFFFF', width: '100%', maxWidth: '640px', maxHeight: '90vh', overflowY: 'auto', padding: '32px', borderRadius: '16px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                <Edit3 size={20} color="#2563EB" />
-                <h3 style={{ fontSize: '1.25rem', fontWeight: 800, color: 'var(--text-main)' }}>Edit Candidate Profile Details</h3>
-              </div>
-              <button onClick={() => setIsEditing(false)} className="btn-ghost" style={{ padding: '6px' }}>
-                <X size={20} />
-              </button>
-            </div>
-
-            <form onSubmit={handleSaveModal} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
-              <div>
-                <label style={{ fontSize: '0.78rem', fontWeight: 700, display: 'block', marginBottom: '4px' }}>FULL NAME</label>
-                <input type="text" required className="input-field" value={profile.name} onChange={(e) => setProfile({ ...profile, name: e.target.value })} />
-              </div>
-
-              <div>
-                <label style={{ fontSize: '0.78rem', fontWeight: 700, display: 'block', marginBottom: '4px' }}>PHONE NUMBER</label>
-                <input type="text" className="input-field" value={profile.phone} onChange={(e) => setProfile({ ...profile, phone: e.target.value })} />
-              </div>
-
-              <div>
-                <label style={{ fontSize: '0.78rem', fontWeight: 700, display: 'block', marginBottom: '4px' }}>DATE OF BIRTH</label>
-                <input type="date" className="input-field" value={profile.dob} onChange={(e) => setProfile({ ...profile, dob: e.target.value })} />
-              </div>
-
-              <div>
-                <label style={{ fontSize: '0.78rem', fontWeight: 700, display: 'block', marginBottom: '4px' }}>GENDER</label>
-                <select className="input-field" value={profile.gender} onChange={(e) => setProfile({ ...profile, gender: e.target.value })}>
-                  <option value="Male">Male</option>
-                  <option value="Female">Female</option>
-                  <option value="Other">Other</option>
-                </select>
-              </div>
-
-              <div style={{ gridColumn: 'span 2' }}>
-                <label style={{ fontSize: '0.78rem', fontWeight: 700, display: 'block', marginBottom: '4px' }}>LOCATION / ADDRESS</label>
-                <input type="text" className="input-field" value={profile.address} onChange={(e) => setProfile({ ...profile, address: e.target.value })} />
-              </div>
-
-              <div>
-                <label style={{ fontSize: '0.78rem', fontWeight: 700, display: 'block', marginBottom: '4px' }}>COLLEGE</label>
-                <input type="text" required className="input-field" value={profile.college} onChange={(e) => setProfile({ ...profile, college: e.target.value })} />
-              </div>
-
-              <div>
-                <label style={{ fontSize: '0.78rem', fontWeight: 700, display: 'block', marginBottom: '4px' }}>DEGREE</label>
-                <input type="text" required className="input-field" value={profile.degree} onChange={(e) => setProfile({ ...profile, degree: e.target.value })} />
-              </div>
-
-              <div>
-                <label style={{ fontSize: '0.78rem', fontWeight: 700, display: 'block', marginBottom: '4px' }}>BRANCH</label>
-                <input type="text" required className="input-field" value={profile.branch} onChange={(e) => setProfile({ ...profile, branch: e.target.value })} />
-              </div>
-
-              <div>
-                <label style={{ fontSize: '0.78rem', fontWeight: 700, display: 'block', marginBottom: '4px' }}>CGPA (OUT OF 10)</label>
-                <input type="number" step="0.1" required className="input-field" value={profile.cgpa} onChange={(e) => setProfile({ ...profile, cgpa: parseFloat(e.target.value) })} />
-              </div>
-
-              <div>
-                <label style={{ fontSize: '0.78rem', fontWeight: 700, display: 'block', marginBottom: '4px' }}>GRADUATION YEAR</label>
-                <input type="number" required className="input-field" value={profile.grad_year} onChange={(e) => setProfile({ ...profile, grad_year: parseInt(e.target.value) })} />
-              </div>
-
-              <div>
-                <label style={{ fontSize: '0.78rem', fontWeight: 700, display: 'block', marginBottom: '4px' }}>LEETCODE HANDLE</label>
-                <input type="text" className="input-field" value={profile.leetcode} onChange={(e) => setProfile({ ...profile, leetcode: e.target.value })} />
-              </div>
-
-              <div>
-                <label style={{ fontSize: '0.78rem', fontWeight: 700, display: 'block', marginBottom: '4px' }}>GITHUB HANDLE</label>
-                <input type="text" className="input-field" value={profile.github} onChange={(e) => setProfile({ ...profile, github: e.target.value })} />
-              </div>
-
-              <div style={{ gridColumn: 'span 2', display: 'flex', gap: '12px', marginTop: '12px' }}>
-                <button type="button" onClick={() => setIsEditing(false)} className="btn-secondary" style={{ flex: 1, height: '42px', justifyContent: 'center' }}>
-                  Cancel
-                </button>
-                <button type="submit" className="btn-primary" style={{ flex: 1, height: '42px', justifyContent: 'center' }}>
-                  Save Profile
-                </button>
-              </div>
-            </form>
-          </div>
+      {saveStatus && (
+        <div style={{ padding: '12px 18px', background: '#DCFCE7', border: '1px solid #86EFAC', color: '#166534', borderRadius: '8px', fontSize: '0.88rem', fontWeight: 600 }}>
+          {saveStatus}
         </div>
       )}
+
+      {/* Main Profile Content */}
+      <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '24px' }}>
+        {/* Left Column: Personal, Education & Projects */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+          <div className="glass-card" style={{ padding: '24px' }}>
+            <h3 style={{ fontSize: '1.1rem', fontWeight: 800, color: 'var(--text-main)', marginBottom: '16px' }}>
+              Academic & Contact Dossier
+            </h3>
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', fontSize: '0.85rem' }}>
+              <div>
+                <label style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)', display: 'block', marginBottom: '4px' }}>FULL NAME</label>
+                {isEditing ? (
+                  <input type="text" className="input-field" value={profile.name} onChange={(e) => handleProfileChange('name', e.target.value)} />
+                ) : (
+                  <div>{profile.name}</div>
+                )}
+              </div>
+
+              <div>
+                <label style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)', display: 'block', marginBottom: '4px' }}>EMAIL ADDRESS</label>
+                <div>{profile.email}</div>
+              </div>
+
+              <div>
+                <label style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)', display: 'block', marginBottom: '4px' }}>PHONE NUMBER</label>
+                {isEditing ? (
+                  <input type="text" className="input-field" value={profile.phone} onChange={(e) => handleProfileChange('phone', e.target.value)} />
+                ) : (
+                  <div>{profile.phone || 'Not provided'}</div>
+                )}
+              </div>
+
+              <div>
+                <label style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)', display: 'block', marginBottom: '4px' }}>GENDER</label>
+                {isEditing ? (
+                  <select className="input-field" value={profile.gender} onChange={(e) => handleProfileChange('gender', e.target.value)}>
+                    <option value="Male">Male</option>
+                    <option value="Female">Female</option>
+                    <option value="Other">Other</option>
+                    <option value="Prefer not to say">Prefer not to say</option>
+                  </select>
+                ) : (
+                  <div>{profile.gender}</div>
+                )}
+              </div>
+
+              <div>
+                <label style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)', display: 'block', marginBottom: '4px' }}>DEPARTMENT / BRANCH</label>
+                {isEditing ? (
+                  <input type="text" className="input-field" value={profile.branch} onChange={(e) => handleProfileChange('branch', e.target.value)} />
+                ) : (
+                  <div>{profile.branch}</div>
+                )}
+              </div>
+
+              <div>
+                <label style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)', display: 'block', marginBottom: '4px' }}>YEAR OF STUDY</label>
+                {isEditing ? (
+                  <select className="input-field" value={profile.year_of_study} onChange={(e) => handleProfileChange('year_of_study', e.target.value)}>
+                    <option value="1st Year">1st Year</option>
+                    <option value="2nd Year">2nd Year</option>
+                    <option value="3rd Year">3rd Year</option>
+                    <option value="4th Year">4th Year</option>
+                    <option value="Postgraduate">Postgraduate</option>
+                  </select>
+                ) : (
+                  <div>{profile.year_of_study}</div>
+                )}
+              </div>
+
+              <div>
+                <label style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)', display: 'block', marginBottom: '4px' }}>CGPA (OUT OF 10)</label>
+                {isEditing ? (
+                  <input type="number" step="0.1" className="input-field" value={profile.cgpa} onChange={(e) => handleProfileChange('cgpa', e.target.value)} />
+                ) : (
+                  <div><strong>{profile.cgpa} / 10</strong></div>
+                )}
+              </div>
+
+              <div>
+                <label style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)', display: 'block', marginBottom: '4px' }}>LOCATION / CITY</label>
+                {isEditing ? (
+                  <input type="text" className="input-field" value={profile.address} onChange={(e) => handleProfileChange('address', e.target.value)} />
+                ) : (
+                  <div>{profile.address || 'Not provided'}</div>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Developer Handles */}
+          <div className="glass-card" style={{ padding: '24px' }}>
+            <h3 style={{ fontSize: '1.1rem', fontWeight: 800, color: 'var(--text-main)', marginBottom: '16px' }}>
+              Developer Handles & Coding Profiles
+            </h3>
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', fontSize: '0.85rem' }}>
+              <div>
+                <label style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)', display: 'block', marginBottom: '4px' }}>LEETCODE USERNAME</label>
+                {isEditing ? (
+                  <input type="text" className="input-field" value={profile.leetcode} onChange={(e) => handleProfileChange('leetcode', e.target.value)} />
+                ) : (
+                  <div>{profile.leetcode || 'Not provided'}</div>
+                )}
+              </div>
+
+              <div>
+                <label style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)', display: 'block', marginBottom: '4px' }}>GITHUB USERNAME</label>
+                {isEditing ? (
+                  <input type="text" className="input-field" value={profile.github} onChange={(e) => handleProfileChange('github', e.target.value)} />
+                ) : (
+                  <div>{profile.github || 'Not provided'}</div>
+                )}
+              </div>
+
+              <div>
+                <label style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)', display: 'block', marginBottom: '4px' }}>LINKEDIN PROFILE</label>
+                {isEditing ? (
+                  <input type="url" className="input-field" value={profile.linkedin} onChange={(e) => handleProfileChange('linkedin', e.target.value)} />
+                ) : (
+                  <div>{profile.linkedin ? <a href={profile.linkedin} target="_blank" rel="noreferrer" style={{ color: '#2563EB' }}>{profile.linkedin}</a> : 'Not provided'}</div>
+                )}
+              </div>
+
+              <div>
+                <label style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)', display: 'block', marginBottom: '4px' }}>PORTFOLIO WEBSITE</label>
+                {isEditing ? (
+                  <input type="url" className="input-field" value={profile.portfolio} onChange={(e) => handleProfileChange('portfolio', e.target.value)} />
+                ) : (
+                  <div>{profile.portfolio ? <a href={profile.portfolio} target="_blank" rel="noreferrer" style={{ color: '#2563EB' }}>{profile.portfolio}</a> : 'Not provided'}</div>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Projects */}
+          <div className="glass-card" style={{ padding: '24px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+              <h3 style={{ fontSize: '1.1rem', fontWeight: 800, color: 'var(--text-main)' }}>Engineering Projects</h3>
+              <button onClick={() => setShowAddProject(!showAddProject)} className="btn-secondary" style={{ padding: '4px 10px', fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                <Plus size={14} /> Add Project
+              </button>
+            </div>
+
+            {showAddProject && (
+              <div style={{ padding: '16px', background: '#F8FAFC', borderRadius: '10px', marginBottom: '16px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                <input type="text" placeholder="Project Title" className="input-field" value={newProjTitle} onChange={(e) => setNewProjTitle(e.target.value)} />
+                <textarea placeholder="Description" className="input-field" rows={2} value={newProjDesc} onChange={(e) => setNewProjDesc(e.target.value)} />
+                <input type="text" placeholder="Technologies Used (e.g. React, Java, SQL)" className="input-field" value={newProjTech} onChange={(e) => setNewProjTech(e.target.value)} />
+                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
+                  <button onClick={() => setShowAddProject(false)} className="btn-secondary">Cancel</button>
+                  <button onClick={handleAddProject} className="btn-primary">Save Project</button>
+                </div>
+              </div>
+            )}
+
+            {projects.length > 0 ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                {projects.map((p, idx) => (
+                  <div key={idx} style={{ padding: '14px', border: '1px solid var(--border-light)', borderRadius: '8px', background: '#FFFFFF', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                    <div>
+                      <h4 style={{ fontWeight: 700, fontSize: '0.95rem', color: 'var(--text-main)' }}>{p.title}</h4>
+                      <p style={{ fontSize: '0.82rem', color: 'var(--text-muted)', marginTop: '2px' }}>{p.desc}</p>
+                      {p.tech && <div style={{ fontSize: '0.78rem', color: '#2563EB', fontWeight: 600, marginTop: '4px' }}>Tech: {p.tech}</div>}
+                    </div>
+                    <button onClick={() => handleRemoveProject(idx)} className="btn-ghost" style={{ padding: '4px', color: '#DC2626' }}>
+                      <Trash2 size={14} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div style={{ fontSize: '0.82rem', color: 'var(--text-muted)' }}>No projects added yet. Click 'Add Project' to showcase your engineering work.</div>
+            )}
+          </div>
+        </div>
+
+        {/* Right Column: Skills, Coding Stats & Certifications */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+          {/* Verified Skills */}
+          <div className="glass-card" style={{ padding: '24px' }}>
+            <h3 style={{ fontSize: '1.05rem', fontWeight: 800, color: 'var(--text-main)', marginBottom: '14px' }}>
+              Verified Technical Skills
+            </h3>
+            {skills.length > 0 ? (
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                {skills.map((sk, idx) => (
+                  <span key={idx} className="badge badge-ai" style={{ padding: '4px 10px', fontSize: '0.78rem' }}>
+                    {sk}
+                  </span>
+                ))}
+              </div>
+            ) : (
+              <div style={{ fontSize: '0.82rem', color: 'var(--text-muted)' }}>No skills added. Click 'Edit Profile' to add your technical skills.</div>
+            )}
+          </div>
+
+          {/* Live LeetCode Sync */}
+          {profile.leetcode && (
+            <div className="glass-card" style={{ padding: '24px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                <h3 style={{ fontSize: '1.05rem', fontWeight: 800, color: '#D97706' }}>
+                  LeetCode Statistics
+                </h3>
+                <span className="badge badge-auth">{profile.leetcode}</span>
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', fontSize: '0.85rem' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <span>Problems Solved:</span>
+                  <strong>{leetCodeStats.solvedCount}</strong>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', color: '#059669' }}>
+                  <span>Easy:</span>
+                  <strong>{leetCodeStats.easy}</strong>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', color: '#D97706' }}>
+                  <span>Medium:</span>
+                  <strong>{leetCodeStats.medium}</strong>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', color: '#DC2626' }}>
+                  <span>Hard:</span>
+                  <strong>{leetCodeStats.hard}</strong>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Certifications */}
+          <div className="glass-card" style={{ padding: '24px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
+              <h3 style={{ fontSize: '1.05rem', fontWeight: 800, color: 'var(--text-main)' }}>Certifications</h3>
+              <button onClick={() => setShowAddCert(!showAddCert)} className="btn-secondary" style={{ padding: '4px 8px', fontSize: '0.72rem' }}>
+                <Plus size={12} /> Add
+              </button>
+            </div>
+
+            {showAddCert && (
+              <div style={{ display: 'flex', gap: '6px', marginBottom: '12px' }}>
+                <input type="text" placeholder="Certification Name" className="input-field" value={newCertTitle} onChange={(e) => setNewCertTitle(e.target.value)} />
+                <button onClick={handleAddCert} className="btn-primary" style={{ padding: '6px 12px', fontSize: '0.78rem' }}>Save</button>
+              </div>
+            )}
+
+            {certs.length > 0 ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                {certs.map((c, idx) => (
+                  <div key={idx} style={{ padding: '10px', background: '#F8FAFC', borderRadius: '6px', fontSize: '0.8rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span>📜 {c}</span>
+                    <button onClick={() => handleRemoveCert(idx)} className="btn-ghost" style={{ padding: '2px', color: '#DC2626' }}>
+                      <Trash2 size={12} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div style={{ fontSize: '0.82rem', color: 'var(--text-muted)' }}>No certifications added.</div>
+            )}
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
