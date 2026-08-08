@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Briefcase, Search, MapPin, DollarSign, Send, CheckCircle, Clock, AlertCircle } from 'lucide-react';
+import { Briefcase, Search, MapPin, DollarSign, Send, CheckCircle, Clock } from 'lucide-react';
 
 export default function ExploreInternships({ apiBaseUrl = 'http://localhost:8000', currentUser }) {
   const [internships, setInternships] = useState([]);
@@ -25,7 +25,7 @@ export default function ExploreInternships({ apiBaseUrl = 'http://localhost:8000
       const res = await fetch(`${apiBaseUrl}/api/v1/company/internships`);
       if (res.ok) {
         const data = await res.json();
-        if (data && data.length > 0) {
+        if (data && Array.isArray(data) && data.length > 0) {
           setInternships(data);
         }
       }
@@ -54,7 +54,7 @@ export default function ExploreInternships({ apiBaseUrl = 'http://localhost:8000
     const newApplied = [...appliedIds, jobId];
     setAppliedIds(newApplied);
     localStorage.setItem('internmatch_applied_ids', JSON.stringify(newApplied));
-    setStatusMsg(`Applied successfully to ${jobTitle} at ${companyName}! Saved live in College Oracle DB.`);
+    setStatusMsg(`Applied successfully to ${jobTitle} at ${companyName}!`);
     setTimeout(() => setStatusMsg(''), 4000);
 
     try {
@@ -87,7 +87,7 @@ export default function ExploreInternships({ apiBaseUrl = 'http://localhost:8000
       <div className="glass-card" style={{ padding: '24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px' }}>
         <div>
           <h2 style={{ fontSize: '1.4rem', fontWeight: 700, color: 'var(--text-main)' }}>Explore Live Internships</h2>
-          <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>Real-time internship postings with application deadlines from recruiters in College Oracle Database.</p>
+          <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>Real-time internship postings from recruiters in College Oracle Database.</p>
         </div>
 
         <div style={{ position: 'relative' }}>
@@ -117,10 +117,10 @@ export default function ExploreInternships({ apiBaseUrl = 'http://localhost:8000
             const company = job.company_name || job.COMPANY_NAME || 'Company';
             const mode = job.work_mode || job.WORK_MODE || 'Hybrid';
             const location = job.location || job.LOCATION || 'Location';
-            const stipend = job.stipend || job.STIPEND || 25000;
-            const skills = job.required_skills || job.REQUIRED_SKILLS || 'Java, SQL';
+            const stipend = job.stipend || job.STIPEND || 0;
+            const skills = job.required_skills || job.REQUIRED_SKILLS || '';
             const duration = job.duration || job.DURATION || '3 Months';
-            const deadline = job.application_deadline || job.APPLICATION_DEADLINE || '2026-07-30';
+            const deadline = job.application_deadline || job.APPLICATION_DEADLINE || '';
             const isClosed = job.status === 'CLOSED' || job.STATUS === 'CLOSED';
 
             const hasApplied = appliedIds.includes(jobId);
@@ -143,11 +143,15 @@ export default function ExploreInternships({ apiBaseUrl = 'http://localhost:8000
                     <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}><MapPin size={14} /> {location}</span>
                     <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}><DollarSign size={14} /> ₹{stipend}/mo</span>
                     <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}><Briefcase size={14} /> {duration}</span>
-                    <span style={{ display: 'flex', alignItems: 'center', gap: '4px', color: '#DC2626', fontWeight: 600 }}><Clock size={14} /> Deadline: {deadline}</span>
+                    {deadline && (
+                      <span style={{ display: 'flex', alignItems: 'center', gap: '4px', color: '#DC2626', fontWeight: 600 }}><Clock size={14} /> Deadline: {deadline}</span>
+                    )}
                   </div>
-                  <div style={{ fontSize: '0.8rem', color: 'var(--text-sub)', marginTop: '8px' }}>
-                    <strong>Required Skills:</strong> {skills}
-                  </div>
+                  {skills && (
+                    <div style={{ fontSize: '0.8rem', color: 'var(--text-sub)', marginTop: '8px' }}>
+                      <strong>Required Skills:</strong> {skills}
+                    </div>
+                  )}
                 </div>
 
                 <div>
@@ -171,7 +175,7 @@ export default function ExploreInternships({ apiBaseUrl = 'http://localhost:8000
         </div>
       ) : (
         <div className="glass-card" style={{ padding: '48px', textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.95rem' }}>
-          No active internship postings available in Oracle DB.
+          No active internship postings available. Recruiters can post roles from Company Dashboard.
         </div>
       )}
     </div>

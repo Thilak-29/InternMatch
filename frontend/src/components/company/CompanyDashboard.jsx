@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Briefcase, Users, UserCheck, Calendar, Send, Award, Edit3, Trash2, MapPin, DollarSign, Clock, X, CheckCircle } from 'lucide-react';
+import { Briefcase, Users, UserCheck, Calendar, Send, Award, Edit3, Trash2, MapPin, DollarSign, Clock, X } from 'lucide-react';
 
 export default function CompanyDashboard({ apiBaseUrl = 'http://localhost:8000', currentUser }) {
   const [stats, setStats] = useState({
@@ -20,13 +20,13 @@ export default function CompanyDashboard({ apiBaseUrl = 'http://localhost:8000',
     location: '',
     stipend: 35000,
     openings: 5,
-    application_deadline: '2026-07-30'
+    application_deadline: ''
   });
 
   const [notificationMsg, setNotificationMsg] = useState('');
 
   const companyId = currentUser?.userId || currentUser?.user_id || 10;
-  const companyName = currentUser?.name || currentUser?.username || 'NVIDIA Corporation';
+  const companyName = currentUser?.name || currentUser?.username || 'Company';
 
   useEffect(() => {
     fetchCompanyData();
@@ -41,7 +41,7 @@ export default function CompanyDashboard({ apiBaseUrl = 'http://localhost:8000',
           ...prev,
           ...data,
           total_posted: data.total_posted ?? (data.posted_internships ? data.posted_internships.length : 0),
-          posted_internships: data.posted_internships && data.posted_internships.length > 0 ? data.posted_internships : prev.posted_internships
+          posted_internships: data.posted_internships || []
         }));
       }
     } catch (e) {}
@@ -50,7 +50,7 @@ export default function CompanyDashboard({ apiBaseUrl = 'http://localhost:8000',
       const internRes = await fetch(`${apiBaseUrl}/api/v1/company/internships`);
       if (internRes.ok) {
         const allInternships = await internRes.json();
-        if (allInternships && allInternships.length > 0) {
+        if (allInternships && Array.isArray(allInternships) && allInternships.length > 0) {
           setStats(prev => ({
             ...prev,
             total_posted: prev.total_posted > 0 ? prev.total_posted : allInternships.length,
@@ -64,7 +64,7 @@ export default function CompanyDashboard({ apiBaseUrl = 'http://localhost:8000',
       const appRes = await fetch(`${apiBaseUrl}/api/v1/company/${companyId}/applicants`);
       if (appRes.ok) {
         const apps = await appRes.json();
-        if (apps && apps.length > 0) {
+        if (apps && Array.isArray(apps)) {
           let shortlisted = 0;
           let offers = 0;
           apps.forEach(a => {
@@ -92,7 +92,7 @@ export default function CompanyDashboard({ apiBaseUrl = 'http://localhost:8000',
       location: job.location || job.LOCATION || 'Bengaluru',
       stipend: job.stipend || job.STIPEND || 35000,
       openings: job.openings || job.OPENINGS || 5,
-      application_deadline: job.application_deadline || job.APPLICATION_DEADLINE || '2026-07-30'
+      application_deadline: job.application_deadline || job.APPLICATION_DEADLINE || ''
     });
   };
 
@@ -105,12 +105,12 @@ export default function CompanyDashboard({ apiBaseUrl = 'http://localhost:8000',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(editForm)
       });
-      setNotificationMsg(`Internship "${editForm.title}" updated successfully in Oracle DB!`);
+      setNotificationMsg(`Internship "${editForm.title}" updated successfully in Oracle DB.`);
       setEditingJob(null);
       fetchCompanyData();
       setTimeout(() => setNotificationMsg(''), 4000);
     } catch (e) {
-      setNotificationMsg(`Updated "${editForm.title}"!`);
+      setNotificationMsg(`Updated "${editForm.title}".`);
       setEditingJob(null);
       setTimeout(() => setNotificationMsg(''), 4000);
     }
@@ -138,15 +138,15 @@ export default function CompanyDashboard({ apiBaseUrl = 'http://localhost:8000',
     }
   };
 
-  const totalPostings = stats.total_posted || stats.posted_internships.length || 2;
+  const totalPostings = stats.total_posted || (stats.posted_internships ? stats.posted_internships.length : 0);
 
   const kpis = [
     { label: 'Total Internships Posted', value: totalPostings, icon: Briefcase, color: '#2563EB', bg: '#DBEAFE' },
-    { label: 'Total Applicants', value: stats.total_applicants || 2, icon: Users, color: '#7C3AED', bg: '#EDE9FE' },
-    { label: 'Shortlisted Candidates', value: stats.shortlisted || 1, icon: UserCheck, color: '#D97706', bg: '#FEF3C7' },
-    { label: 'Interviews Scheduled', value: stats.interviews_scheduled || 1, icon: Calendar, color: '#2563EB', bg: '#E0F2FE' },
-    { label: 'Offers Sent', value: stats.offers_sent || 1, icon: Send, color: '#059669', bg: '#D1FAE5' },
-    { label: 'Hired Students', value: stats.hires_count || 1, icon: Award, color: '#166534', bg: '#DCFCE7' }
+    { label: 'Total Applicants', value: stats.total_applicants || 0, icon: Users, color: '#7C3AED', bg: '#EDE9FE' },
+    { label: 'Shortlisted Candidates', value: stats.shortlisted || 0, icon: UserCheck, color: '#D97706', bg: '#FEF3C7' },
+    { label: 'Interviews Scheduled', value: stats.interviews_scheduled || 0, icon: Calendar, color: '#2563EB', bg: '#E0F2FE' },
+    { label: 'Offers Sent', value: stats.offers_sent || 0, icon: Send, color: '#059669', bg: '#D1FAE5' },
+    { label: 'Hired Students', value: stats.hires_count || 0, icon: Award, color: '#166534', bg: '#DCFCE7' }
   ];
 
   return (
@@ -180,7 +180,7 @@ export default function CompanyDashboard({ apiBaseUrl = 'http://localhost:8000',
             <h2 style={{ fontSize: '1.25rem', fontWeight: 800, color: 'var(--text-main)' }}>
               Active Posted Internships
             </h2>
-            <p style={{ fontSize: '0.82rem', color: 'var(--text-muted)' }}>Manage, edit details, update deadlines, and remove completed internship postings.</p>
+            <p style={{ fontSize: '0.82rem', color: 'var(--text-muted)' }}>Real-time internship listings connected directly to the College Oracle Database.</p>
           </div>
           <span className="badge badge-ai">Oracle DB Live Sync</span>
         </div>
@@ -188,14 +188,14 @@ export default function CompanyDashboard({ apiBaseUrl = 'http://localhost:8000',
         {stats.posted_internships && stats.posted_internships.length > 0 ? (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
             {stats.posted_internships.map((job, idx) => {
-              const title = job.title || job.TITLE || 'Software Engineering Intern';
+              const title = job.title || job.TITLE || 'Internship';
               const company = job.company_name || job.COMPANY_NAME || companyName;
               const mode = job.work_mode || job.WORK_MODE || 'Hybrid';
-              const location = job.location || job.LOCATION || 'Bengaluru';
-              const stipend = job.stipend || job.STIPEND || 35000;
-              const openings = job.openings || job.OPENINGS || 5;
-              const skills = job.required_skills || job.REQUIRED_SKILLS || 'React, Java, SQL, Python';
-              const deadline = job.application_deadline || job.APPLICATION_DEADLINE || '2026-07-30';
+              const location = job.location || job.LOCATION || 'Location';
+              const stipend = job.stipend || job.STIPEND || 0;
+              const openings = job.openings || job.OPENINGS || 1;
+              const skills = job.required_skills || job.REQUIRED_SKILLS || '';
+              const deadline = job.application_deadline || job.APPLICATION_DEADLINE || '';
               const isClosed = job.status === 'CLOSED' || job.STATUS === 'CLOSED';
 
               return (
@@ -216,15 +216,18 @@ export default function CompanyDashboard({ apiBaseUrl = 'http://localhost:8000',
                       <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}><MapPin size={13} /> {location}</span>
                       <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}><DollarSign size={13} /> ₹{stipend}/mo</span>
                       <span>Openings: <strong>{openings}</strong></span>
-                      <span style={{ display: 'flex', alignItems: 'center', gap: '4px', color: '#DC2626', fontWeight: 600 }}><Clock size={13} /> Deadline: {deadline}</span>
+                      {deadline && (
+                        <span style={{ display: 'flex', alignItems: 'center', gap: '4px', color: '#DC2626', fontWeight: 600 }}><Clock size={13} /> Deadline: {deadline}</span>
+                      )}
                     </div>
 
-                    <div style={{ fontSize: '0.8rem', color: 'var(--text-sub)', marginTop: '6px' }}>
-                      <strong>Required Skills:</strong> {skills}
-                    </div>
+                    {skills && (
+                      <div style={{ fontSize: '0.8rem', color: 'var(--text-sub)', marginTop: '6px' }}>
+                        <strong>Skills:</strong> {skills}
+                      </div>
+                    )}
                   </div>
 
-                  {/* Actions: Edit & Delete */}
                   <div style={{ display: 'flex', gap: '8px' }}>
                     <button onClick={() => handleOpenEdit(job)} className="btn-secondary" style={{ padding: '8px 14px', fontSize: '0.82rem', display: 'flex', alignItems: 'center', gap: '6px' }}>
                       <Edit3 size={14} color="#2563EB" /> Edit / Update
@@ -244,7 +247,6 @@ export default function CompanyDashboard({ apiBaseUrl = 'http://localhost:8000',
         )}
       </div>
 
-      {/* Edit Internship Modal */}
       {editingJob && (
         <div style={{ position: 'fixed', inset: 0, zIndex: 1000, background: 'rgba(15,23,42,0.5)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
           <div className="glass-card" style={{ background: '#FFFFFF', width: '100%', maxWidth: '600px', maxHeight: '90vh', overflowY: 'auto', padding: '32px', borderRadius: '16px' }}>

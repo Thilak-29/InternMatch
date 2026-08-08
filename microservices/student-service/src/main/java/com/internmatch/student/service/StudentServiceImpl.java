@@ -35,7 +35,7 @@ public class StudentServiceImpl implements StudentService {
             res.put("cgpa", prof.get("cgpa") != null ? prof.get("cgpa") : prof.get("CGPA"));
             res.put("resume_score", prof.get("resume_score") != null ? prof.get("resume_score") : prof.get("RESUME_SCORE"));
         } else {
-            res.put("student_name", "Thilak P");
+            res.put("student_name", "Student");
             res.put("college", "Karpagam College of Engineering");
             res.put("cgpa", 8.5);
             res.put("resume_score", 88);
@@ -48,7 +48,7 @@ public class StudentServiceImpl implements StudentService {
             String st = (String) (a.get("status") != null ? a.get("status") : a.get("STATUS"));
             if ("SHORTLISTED".equals(st) || "ACCEPTED_FOR_TEST".equals(st) || "ASSESSMENT".equals(st) || "TEST_PASSED".equals(st)) {
                 shortlisted++;
-            } else if ("OFFER_SENT".equals(st) || "OFFER".equals(st)) {
+            } else if ("OFFER_SENT".equals(st) || "OFFER".equals(st) || "HIRED".equals(st)) {
                 offers++;
             }
         }
@@ -68,18 +68,18 @@ public class StudentServiceImpl implements StudentService {
             }
         } catch (Exception e) {}
 
-        Map<String, Object> fallback = new HashMap<>();
-        fallback.put("name", "Thilak P");
-        fallback.put("college", "Karpagam College of Engineering");
-        fallback.put("grad_year", 2026);
-        fallback.put("cgpa", 8.5);
-        fallback.put("skills", "React, Java, SQL, Python");
-        fallback.put("degree", "B.E.");
-        fallback.put("branch", "Computer Science & Engineering");
-        fallback.put("year_of_study", "3rd Year");
-        fallback.put("leetcode", "Thilak0329");
-        fallback.put("github", "Thilak-29");
-        return fallback;
+        Map<String, Object> prof = new HashMap<>();
+        prof.put("name", "Thilak P");
+        prof.put("college", "Karpagam College of Engineering");
+        prof.put("grad_year", 2026);
+        prof.put("cgpa", 8.5);
+        prof.put("skills", "React, Java, SQL, Python");
+        prof.put("degree", "B.E.");
+        prof.put("branch", "Computer Science & Engineering");
+        prof.put("year_of_study", "3rd Year");
+        prof.put("leetcode", "Thilak0329");
+        prof.put("github", "Thilak-29");
+        return prof;
     }
 
     @Override
@@ -98,40 +98,17 @@ public class StudentServiceImpl implements StudentService {
         String linkedin = (String) body.getOrDefault("linkedin", "");
         String portfolio = (String) body.getOrDefault("portfolio", "");
         String phone = (String) body.getOrDefault("phone", "");
-        String dob = (String) body.getOrDefault("dob", "");
-        String gender = (String) body.getOrDefault("gender", "Male");
-        String address = (String) body.getOrDefault("address", location);
 
         try {
-            int updated = jdbcTemplate.update("UPDATE student_profiles SET name=?, college=?, grad_year=?, cgpa=?, address=?, leetcode=?, github=?, year_of_study=?, degree=?, branch=?, skills=?, linkedin=?, portfolio=?, phone=?, dob=?, gender=? WHERE user_id=?",
-                    name, college, gradYear, cgpa, address, leetcode, github, yearOfStudy, degree, department, skills, linkedin, portfolio, phone, dob, gender, studentId);
-            if (updated == 0) {
-                jdbcTemplate.update("INSERT INTO student_profiles (user_id, name, college, grad_year, cgpa, address, leetcode, github, year_of_study, degree, branch, skills, linkedin, portfolio, phone, dob, gender, resume_file_name, resume_score) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'resume.pdf', 88)",
-                        studentId, name, college, gradYear, cgpa, address, leetcode, github, yearOfStudy, degree, department, skills, linkedin, portfolio, phone, dob, gender);
-            }
+            jdbcTemplate.update("DELETE FROM student_profiles WHERE user_id = ?", studentId);
+            jdbcTemplate.update("INSERT INTO student_profiles (user_id, name, college, grad_year, cgpa, address, leetcode, github, year_of_study, degree, branch, skills, linkedin, portfolio, phone) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    studentId, name, college, gradYear, cgpa, location, leetcode, github, yearOfStudy, degree, department, skills, linkedin, portfolio, phone);
         } catch (Exception e) {}
 
-        Map<String, Object> res = new HashMap<>();
-        res.put("success", true);
-        res.put("message", "Profile updated successfully in College Oracle Database.");
-        return res;
-    }
-
-    @Override
-    public Map<String, Object> uploadResume(int studentId, String fileName, String parsedText) {
-        try {
-            int updated = jdbcTemplate.update("UPDATE student_profiles SET resume_file_name=?, resume_parsed_text=?, resume_score=88 WHERE user_id=?", fileName, parsedText, studentId);
-            if (updated == 0) {
-                jdbcTemplate.update("INSERT INTO student_profiles (user_id, name, college, grad_year, cgpa, address, resume_file_name, resume_parsed_text, resume_score, skills) VALUES (?, 'Thilak P', 'Karpagam College of Engineering', 2026, 8.5, 'Coimbatore, India', ?, ?, 88, 'React, Java, SQL, Python')",
-                        studentId, fileName, parsedText);
-            }
-        } catch (Exception e) {}
-
-        Map<String, Object> res = new HashMap<>();
-        res.put("success", true);
-        res.put("resume_score", 88);
-        res.put("message", "Resume saved to Oracle Database.");
-        return res;
+        Map<String, Object> resp = new HashMap<>();
+        resp.put("success", true);
+        resp.put("message", "Profile updated successfully in Oracle DB");
+        return resp;
     }
 
     @Override
@@ -140,57 +117,26 @@ public class StudentServiceImpl implements StudentService {
     }
 
     @Override
-    public Map<String, Object> applyForInternship(int studentId, int internshipId) {
-        applicationRepository.saveApplication(studentId, internshipId);
+    public Map<String, Object> submitApplication(Map<String, Object> applicationData) {
+        int studentId = ((Number) applicationData.getOrDefault("student_id", 3)).intValue();
+        int internshipId = ((Number) applicationData.getOrDefault("internship_id", 1)).intValue();
+        int companyId = ((Number) applicationData.getOrDefault("company_id", 10)).intValue();
+        String companyName = (String) applicationData.getOrDefault("company_name", "NVIDIA Corporation");
+        String jobTitle = (String) applicationData.getOrDefault("job_title", "Software Engineering Intern");
 
-        try {
-            jdbcTemplate.update("INSERT INTO notifications (user_id, message, type) VALUES (?, ?, 'APPLICATION_SUBMITTED')", studentId, "✓ Applied successfully for internship!");
-        } catch (Exception e) {}
+        applicationRepository.saveApplication(studentId, internshipId, companyId, companyName, jobTitle, "APPLIED");
 
-        Map<String, Object> res = new HashMap<>();
-        res.put("success", true);
-        res.put("message", "Application submitted successfully in Oracle DB");
-        return res;
-    }
-
-    @Override
-    public Map<String, Object> updateTestScore(int appId, double score) {
-        String status = score >= 60.0 ? "TEST_PASSED" : "ASSESSMENT_FAILED";
-        applicationRepository.updateScoreAndPassed(appId, score, status, "ASSESSMENT");
-
-        Map<String, Object> res = new HashMap<>();
-        res.put("success", true);
-        res.put("score", score);
-        res.put("status", status);
-        return res;
-    }
-
-    @Override
-    public List<Map<String, Object>> getStudentNotifications(int studentId) {
-        try {
-            return jdbcTemplate.queryForList("SELECT * FROM notifications WHERE user_id = ? ORDER BY id DESC", studentId);
-        } catch (Exception e) {
-            Map<String, Object> n = new HashMap<>();
-            n.put("id", 1);
-            n.put("message", "Welcome to InternMatch AI Platform!");
-            n.put("type", "WELCOME");
-            n.put("is_read", 0);
-            return Collections.singletonList(n);
-        }
+        Map<String, Object> resp = new HashMap<>();
+        resp.put("success", true);
+        resp.put("message", "Applied successfully to " + jobTitle + " at " + companyName);
+        return resp;
     }
 
     @Override
     public List<Map<String, Object>> getNotifications(int studentId) {
-        return getStudentNotifications(studentId);
-    }
-
-    @Override
-    public Map<String, Object> markNotificationRead(int id) {
         try {
-            jdbcTemplate.update("UPDATE notifications SET is_read = 1 WHERE id = ?", id);
+            return jdbcTemplate.queryForList("SELECT * FROM notifications WHERE user_id = ? ORDER BY id DESC", studentId);
         } catch (Exception e) {}
-        Map<String, Object> res = new HashMap<>();
-        res.put("success", true);
-        return res;
+        return Collections.emptyList();
     }
 }

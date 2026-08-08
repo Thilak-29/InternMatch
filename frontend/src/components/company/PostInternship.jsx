@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { PlusCircle, CheckCircle, Calendar, Clock } from 'lucide-react';
+import { PlusCircle, CheckCircle, Clock } from 'lucide-react';
 
 export default function PostInternship({ apiBaseUrl = 'http://localhost:8000', currentUser }) {
   const [title, setTitle] = useState('');
@@ -13,11 +13,11 @@ export default function PostInternship({ apiBaseUrl = 'http://localhost:8000', c
   const [endDate, setEndDate] = useState('2026-08-31');
   const [stipend, setStipend] = useState('35000');
   const [openings, setOpenings] = useState('5');
-  const [deadline, setDeadline] = useState('2026-07-15');
+  const [deadline, setDeadline] = useState('2026-07-30');
   const [showPopup, setShowPopup] = useState(false);
 
   const companyId = currentUser?.userId || currentUser?.user_id || 10;
-  const companyName = currentUser?.name || currentUser?.username || 'NVIDIA Corporation';
+  const companyName = currentUser?.name || currentUser?.username || 'Company';
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -135,7 +135,7 @@ export default function PostInternship({ apiBaseUrl = 'http://localhost:8000', c
             <CheckCircle size={52} color="#059669" />
             <h3 style={{ fontSize: '1.3rem', fontWeight: 800, color: 'var(--text-main)' }}>Internship Published Successfully!</h3>
             <p style={{ fontSize: '0.9rem', color: 'var(--text-muted)' }}>
-              Your internship listing for <strong>{title || 'Software Engineering Intern'}</strong> is now live on the platform with application deadline <strong>{deadline}</strong>.
+              Your internship listing for <strong>{title || 'Internship'}</strong> is now live on the platform with application deadline <strong>{deadline}</strong>.
             </p>
             <button onClick={() => setShowPopup(false)} className="btn-primary" style={{ width: '100%', height: '42px', justifyContent: 'center', marginTop: '8px' }}>
               Awesome!
