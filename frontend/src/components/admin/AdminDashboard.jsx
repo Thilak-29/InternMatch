@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Users, Building2, Briefcase, FileText, Trash2, Search, ChevronDown, ChevronUp, MapPin, DollarSign, Clock, Award, Mail, Phone, BookOpen, Code, ExternalLink, GraduationCap, Shield } from 'lucide-react';
+import { Users, Building2, Briefcase, FileText, Trash2, Search, ChevronDown, ChevronUp, MapPin, DollarSign, Clock, Award, Mail, Phone, BookOpen, Code, ExternalLink, Shield } from 'lucide-react';
 
 export default function AdminDashboard({ apiBaseUrl = 'http://localhost:8081', currentUser }) {
   const [stats, setStats] = useState({
@@ -17,18 +17,22 @@ export default function AdminDashboard({ apiBaseUrl = 'http://localhost:8081', c
   const [activeTab, setActiveTab] = useState('ALL');
   const [searchQuery, setSearchQuery] = useState('');
   const [alertMsg, setAlertMsg] = useState('');
-  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     fetchAdminData();
   }, []);
 
   const fetchAdminData = async () => {
-    setIsLoading(true);
     let localJobs = [];
     try {
       const cached = localStorage.getItem('internmatch_posted_jobs');
       if (cached) localJobs = JSON.parse(cached);
+    } catch (e) {}
+
+    let localStudentApps = [];
+    try {
+      const cachedApps = localStorage.getItem('internmatch_student_applications') || localStorage.getItem('internmatch_student_applications_3');
+      if (cachedApps) localStudentApps = JSON.parse(cachedApps);
     } catch (e) {}
 
     const authBases = [
@@ -86,14 +90,17 @@ export default function AdminDashboard({ apiBaseUrl = 'http://localhost:8081', c
         if (appRes.ok) {
           const apps = await appRes.json();
           if (apps && Array.isArray(apps) && apps.length > 0) {
-            setApplicationsList(apps);
+            const mergedApps = new Map();
+            [...apps, ...localStudentApps].forEach(a => {
+              const key = a.id || a.ID || a.candidate_name;
+              if (key && !mergedApps.has(key)) mergedApps.set(key, a);
+            });
+            setApplicationsList(Array.from(mergedApps.values()));
             break;
           }
         }
       } catch (e) {}
     }
-
-    setIsLoading(false);
   };
 
   const handleDeleteUser = async (userId, username) => {
@@ -103,9 +110,6 @@ export default function AdminDashboard({ apiBaseUrl = 'http://localhost:8081', c
 
     try {
       await fetch(`http://localhost:8081/api/v1/admin/users/${userId}`, { method: 'DELETE' });
-    } catch (e) {}
-    try {
-      await fetch(`${apiBaseUrl}/api/v1/admin/users/${userId}`, { method: 'DELETE' });
     } catch (e) {}
 
     setAlertMsg(`User "${username}" was deleted from Oracle Database.`);
