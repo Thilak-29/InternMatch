@@ -68,6 +68,9 @@ export default function Header({ role, onNavigate, currentTab, onLogout, current
                 <button style={navBtnStyle(currentTab === 'applicants' || currentTab === 'view-applicants')} onClick={() => onNavigate('applicants')}>
                   <Users size={16} /> Applicants & Hires
                 </button>
+                <button style={navBtnStyle(currentTab === 'company-profile' || currentTab === 'profile')} onClick={() => onNavigate('company-profile')}>
+                  <User size={16} /> Company Profile
+                </button>
               </>
             )}
 

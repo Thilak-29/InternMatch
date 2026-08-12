@@ -1,8 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { Briefcase, Sparkles, FileText, Bookmark, Calendar, TrendingUp, Upload, AlertCircle, ArrowRight, CheckCircle2 } from 'lucide-react';
+import { Briefcase, Sparkles, FileText, Bookmark, Calendar, TrendingUp, Upload, AlertCircle, ArrowRight, CheckCircle2, Award, ExternalLink, BookOpen, Cpu, ShieldCheck, RefreshCw } from 'lucide-react';
+import API_CONFIG from '../../config/apiConfig';
 
-export default function StudentDashboard({ apiBaseUrl = 'http://localhost:8082', currentUser, onNavigate }) {
+export default function StudentDashboard({ currentUser, onNavigate }) {
   const studentId = currentUser?.userId || currentUser?.user_id || currentUser?.id || currentUser?.ID;
+  const token = currentUser?.token || '';
+  const baseUrl = API_CONFIG.STUDENT_SERVICE_URL;
+  const aiApiUrl = API_CONFIG.AI_SERVICE_URL;
 
   if (!studentId) {
     return (
@@ -25,334 +29,519 @@ export default function StudentDashboard({ apiBaseUrl = 'http://localhost:8082',
     recent_applications: []
   });
 
+  const [existingSkills, setExistingSkills] = useState([]);
+  const [profileDegree, setProfileDegree] = useState('');
+  const [profileBranch, setProfileBranch] = useState('');
+  const [profileBio, setProfileBio] = useState('');
+
+  const [recommendedCourses, setRecommendedCourses] = useState([]);
+  const [recommendedCertifications, setRecommendedCertifications] = useState([]);
+  const [isAiAdvisorLoading, setIsAiAdvisorLoading] = useState(true);
+
   const [isLoading, setIsLoading] = useState(true);
-  const [isScanningResume, setIsScanningResume] = useState(false);
-  const [scanResult, setScanResult] = useState(null);
-  const [uploadedFileName, setUploadedFileName] = useState('');
 
   useEffect(() => {
     fetchDashboard();
+    fetchStudentProfileAndAiRecommendations();
   }, [studentId]);
+
+  const fetchStudentProfileAndAiRecommendations = async () => {
+    setIsAiAdvisorLoading(true);
+    let skillsString = '';
+    let deg = '';
+    let br = '';
+    let bi = '';
+    let parsed = [];
+
+    try {
+      const res = await fetch(`${baseUrl}/api/v1/student/${studentId}/profile`, {
+        headers: { 'Authorization': token }
+      });
+      if (res.ok) {
+        const prof = await res.json();
+        skillsString = prof.skills || prof.SKILLS || '';
+        deg = prof.degree || prof.DEGREE || '';
+        br = prof.branch || prof.department || prof.BRANCH || '';
+        bi = prof.bio || prof.BIO || '';
+
+        parsed = typeof skillsString === 'string'
+          ? skillsString.split(',').map(s => s.trim()).filter(Boolean)
+          : (Array.isArray(skillsString) ? skillsString : []);
+
+        setExistingSkills(parsed);
+        setProfileDegree(deg);
+        setProfileBranch(br);
+        setProfileBio(bi);
+      }
+    } catch (e) {}
+
+    const defaultRecs = generateFallbackRecommendations(parsed.length > 0 ? parsed : ['SQL']);
+
+    try {
+      const aiRes = await fetch(`${aiApiUrl}/api/v1/ai/career-advisor`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          skills: skillsString || 'SQL',
+          degree: deg,
+          branch: br,
+          bio: bi
+        })
+      });
+
+      if (aiRes.ok) {
+        const aiData = await aiRes.json();
+        if (Array.isArray(aiData.courses) && aiData.courses.length > 0) {
+          setRecommendedCourses(aiData.courses);
+        } else {
+          setRecommendedCourses(defaultRecs.courses);
+        }
+        if (Array.isArray(aiData.certifications) && aiData.certifications.length > 0) {
+          setRecommendedCertifications(aiData.certifications);
+        } else {
+          setRecommendedCertifications(defaultRecs.certs);
+        }
+      } else {
+        setRecommendedCourses(defaultRecs.courses);
+        setRecommendedCertifications(defaultRecs.certs);
+      }
+    } catch (e) {
+      setRecommendedCourses(defaultRecs.courses);
+      setRecommendedCertifications(defaultRecs.certs);
+    } finally {
+      setIsAiAdvisorLoading(false);
+    }
+  };
+
+  const generateFallbackRecommendations = (skillsArr) => {
+    const sLower = skillsArr.map(s => String(s).toLowerCase()).join(' ');
+    
+    if (sLower.includes('sql') || sLower.includes('database') || sLower.includes('oracle') || sLower.includes('postgres') || skillsArr.length === 0) {
+      return {
+        courses: [
+          {
+            id: 1,
+            title: "Oracle Database SQL Certified Associate Mastery",
+            provider: "Oracle University & Coursera",
+            duration: "4 Weeks",
+            level: "Intermediate",
+            reason: "Validates your SQL query optimization, DDL/DML, and database schema design skills",
+            badge: "Recommended for SQL",
+            url: "https://www.coursera.org/learn/oracle-sql-basics"
+          },
+          {
+            id: 2,
+            title: "Advanced PostgreSQL Tuning & High-Performance Indexing",
+            provider: "PostgreSQL Guild & edX",
+            duration: "5 Weeks",
+            level: "Advanced",
+            reason: "Complements your SQL background for Enterprise Backend & Data Engineer roles",
+            badge: "High Demand",
+            url: "https://www.edx.org/learn/postgresql"
+          },
+          {
+            id: 3,
+            title: "Cloud Database Engineering & AWS RDS Architecture",
+            provider: "AWS Training & Udemy",
+            duration: "6 Weeks",
+            level: "Intermediate",
+            reason: "Bridges SQL relational databases to cloud database infrastructure",
+            badge: "Top Rated",
+            url: "https://aws.amazon.com/training/course-descriptions/database-offering/"
+          }
+        ],
+        certs: [
+          {
+            id: 1,
+            name: "Oracle Database SQL Certified Associate (1Z0-071)",
+            issuer: "Oracle University",
+            description: "Official Oracle credential verifying SQL fundamental & advanced query expertise.",
+            url: "https://education.oracle.com/oracle-database-sql/pexam_1Z0-071",
+            color: "#DC2626"
+          },
+          {
+            id: 2,
+            name: "AWS Certified Database – Specialty",
+            issuer: "Amazon Web Services (AWS)",
+            description: "Industry benchmark for designing, deploying, and managing relational cloud SQL databases.",
+            url: "https://aws.amazon.com/certification/certified-database-specialty/",
+            color: "#F59E0B"
+          },
+          {
+            id: 3,
+            name: "Meta Database Engineer Professional Certificate",
+            issuer: "Meta & Coursera",
+            description: "Verified credential covering SQL, Database Administration, and Data Modeling.",
+            url: "https://www.coursera.org/professional-certificates/meta-database-engineer",
+            color: "#2563EB"
+          }
+        ]
+      };
+    }
+
+    return {
+      courses: [
+        {
+          id: 1,
+          title: "Cloud Native Microservices with Docker & AWS",
+          provider: "AWS Academy & Coursera",
+          duration: "6 Weeks",
+          level: "Advanced",
+          reason: "Bridges your technical skills to Enterprise Cloud Deployment & Microservices",
+          badge: "High Impact",
+          url: "https://www.coursera.org/specializations/aws-cloud-solutions-architect"
+        },
+        {
+          id: 2,
+          title: "Full-Stack Enterprise Systems with React & Spring Boot",
+          provider: "Meta Tech Professional",
+          duration: "4 Weeks",
+          level: "Intermediate",
+          reason: "Enhances your frontend/backend architecture with production API security",
+          badge: "In Demand",
+          url: "https://www.coursera.org/professional-certificates/meta-back-end-developer"
+        },
+        {
+          id: 3,
+          title: "High-Scale Distributed System Design & Data Lakes",
+          provider: "MIT OpenCourseWare",
+          duration: "8 Weeks",
+          level: "Advanced",
+          reason: "Complements your profile for Solution Architect and High-Load Engineering roles",
+          badge: "Top Rated",
+          url: "https://ocw.mit.edu/courses/6-824-distributed-systems-spring-2020/"
+        }
+      ],
+      certs: [
+        {
+          id: 1,
+          name: "AWS Certified Developer – Associate",
+          issuer: "Amazon Web Services (AWS)",
+          description: "Industry standard certification for developing and deploying cloud microservices.",
+          url: "https://aws.amazon.com/certification/certified-developer-associate/",
+          color: "#F59E0B"
+        },
+        {
+          id: 2,
+          name: "Oracle Certified Professional: Java SE 17 Developer",
+          issuer: "Oracle Corporation",
+          description: "Official credential verifying high-level mastery of core Java, JVM, and enterprise APIs.",
+          url: "https://education.oracle.com/oracle-certified-professional-java-se-17-developer/trackp_OCPJAV17",
+          color: "#DC2626"
+        },
+        {
+          id: 3,
+          name: "Meta Front-End Developer Professional Certificate",
+          issuer: "Meta & Coursera",
+          description: "Verified credential validating React, Javascript, and responsive UX design skills.",
+          url: "https://www.coursera.org/professional-certificates/meta-front-end-developer",
+          color: "#2563EB"
+        }
+      ]
+    };
+  };
 
   const fetchDashboard = async () => {
     setIsLoading(true);
 
-    let localApps = [];
     try {
-      const cached = localStorage.getItem(`student_applications_${studentId}`);
-      if (cached) {
-        const parsed = JSON.parse(cached);
-        if (Array.isArray(parsed)) localApps = parsed;
-      }
-    } catch (e) {}
-
-    const endpoints = [
-      `${apiBaseUrl}/api/v1/student/${studentId}/applications`,
-      `http://localhost:8082/api/v1/student/${studentId}/applications`,
-      `http://localhost:8000/api/v1/student/${studentId}/applications`
-    ];
-
-    let serverApps = [];
-    for (const url of endpoints) {
-      try {
-        const res = await fetch(url);
-        if (res.ok) {
-          const apps = await res.json();
-          if (apps && Array.isArray(apps)) {
-            serverApps = apps;
-            break;
-          }
+      const res = await fetch(`${baseUrl}/api/v1/student/${studentId}/dashboard`, {
+        headers: {
+          'Authorization': token,
+          'Content-Type': 'application/json'
         }
-      } catch (e) {
-        console.error("Dashboard fetch error:", e);
-      }
-    }
+      });
 
-    const mergedMap = new Map();
+      if (res.ok) {
+        const result = await res.json();
+        const appsList = Array.isArray(result.recent_applications) ? result.recent_applications : [];
+        const liveUpcoming = appsList.filter(a => ['SHORTLISTED', 'ACCEPTED_FOR_TEST', 'TEST_PASSED', 'OFFER_ISSUED', 'OFFER_EXTENDED', 'ACCEPTED', 'INTERVIEW_SCHEDULED'].includes((a.status || a.STATUS || '').toUpperCase())).length;
 
-    // 1. Add server applications
-    serverApps.forEach(a => {
-      const key = a.internship_id || a.INTERNSHIP_ID || a.id || a.ID || a.title;
-      if (key) mergedMap.set(key, a);
-    });
-
-    // 2. Merge local confirmed applications
-    localApps.forEach(a => {
-      const key = a.internship_id || a.INTERNSHIP_ID || a.id || a.ID || a.title;
-      if (key && !mergedMap.has(key)) {
-        mergedMap.set(key, a);
-      }
-    });
-
-    const appsList = Array.from(mergedMap.values());
-    const passedTests = appsList.filter(a => (a.status || a.STATUS) === 'OFFER_SENT' || (a.status || a.STATUS) === 'TEST_PASSED').length;
-    const offersReceived = appsList.filter(a => (a.status || a.STATUS) === 'OFFER_SENT' || (a.status || a.STATUS) === 'HIRED').length;
-
-    const cachedScore = localStorage.getItem(`resume_score_${studentId}`) || (appsList.length > 0 ? 88 : 0);
-    const cachedMatch = localStorage.getItem(`ai_match_rate_${studentId}`) || (appsList.length > 0 ? '94%' : '0%');
-
-    setData({
-      total_applied: appsList.length,
-      ai_match_rate: cachedMatch,
-      resume_score: cachedScore,
-      saved_internships: 0,
-      upcoming_interviews: passedTests,
-      recent_applications: appsList
-    });
-
-    setIsLoading(false);
-  };
-
-  const handleResumeScan = async (e) => {
-    let file = null;
-    let fileName = 'Candidate_Technical_Resume.pdf';
-    if (e && e.target && e.target.files && e.target.files.length > 0) {
-      file = e.target.files[0];
-      fileName = file.name;
-    }
-
-    setUploadedFileName(fileName);
-    setIsScanningResume(true);
-    setScanResult(null);
-
-    const aiEndpoints = [
-      'http://localhost:8084/api/v1/ai/ats-match',
-      'http://localhost:8000/api/v1/ai/ats-match'
-    ];
-
-    const studentSkills = currentUser?.skills || 'React, Java, SQL, Python, Spring Boot, DSA';
-
-    let scanSuccessful = false;
-    for (const url of aiEndpoints) {
-      try {
-        const res = await fetch(url, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            student_skills: studentSkills,
-            resume_text: `${fileName} - Candidate technical profile. Verified competencies in ${studentSkills}.`,
-            required_skills: 'Python, PyTorch, CUDA, Algorithms, React, Java, SQL, Spring Boot'
-          })
+        setData({
+          total_applied: result.total_applied !== undefined ? result.total_applied : appsList.length,
+          ai_match_rate: result.ai_match_rate || '0%',
+          resume_score: result.resume_score || 0,
+          saved_internships: result.saved_internships || 0,
+          upcoming_interviews: liveUpcoming,
+          recent_applications: appsList
         });
-
-        if (res.ok) {
-          const result = await res.json();
-          const matchPct = result.match_rate || `${result.match_percentage || 94}%`;
-          const atsScore = result.resume_score || 88;
-
-          let skillsList = ['React', 'Java', 'SQL', 'Python', 'Spring Boot'];
-          if (result.matched_skills) {
-            if (Array.isArray(result.matched_skills)) {
-              skillsList = result.matched_skills;
-            } else if (typeof result.matched_skills === 'string') {
-              skillsList = result.matched_skills.split(',').map(s => s.trim()).filter(Boolean);
-            }
-          }
+      } else {
+        const appRes = await fetch(`${baseUrl}/api/v1/student/${studentId}/applications`, {
+          headers: { 'Authorization': token }
+        });
+        if (appRes.ok) {
+          const apps = await appRes.json();
+          const upcoming = apps.filter(a => ['SHORTLISTED', 'ACCEPTED_FOR_TEST', 'TEST_PASSED', 'OFFER_ISSUED', 'OFFER_EXTENDED', 'ACCEPTED', 'INTERVIEW_SCHEDULED'].includes((a.status || a.STATUS || '').toUpperCase())).length;
+          const matchScores = apps.map(a => a.match_score || a.MATCH_SCORE).filter(s => s && s > 0);
+          const avgMatch = matchScores.length > 0 ? Math.round(matchScores.reduce((a, b) => a + b, 0) / matchScores.length) + '%' : '0%';
 
           setData(prev => ({
             ...prev,
-            ai_match_rate: matchPct,
-            resume_score: atsScore
+            total_applied: apps.length,
+            ai_match_rate: avgMatch,
+            upcoming_interviews: upcoming,
+            recent_applications: apps
           }));
-
-          setScanResult({
-            score: atsScore,
-            matchRate: matchPct,
-            matchedSkills: skillsList,
-            feedback: result.feedback || 'ATS Evaluation complete. Strong technical alignment with active role requirements.'
-          });
-
-          localStorage.setItem(`resume_score_${studentId}`, atsScore);
-          localStorage.setItem(`ai_match_rate_${studentId}`, matchPct);
-          scanSuccessful = true;
-          break;
         }
-      } catch (err) {
-        console.error("ATS match error:", err);
       }
+    } catch (e) {
+      console.error("Dashboard fetch error:", e);
+    } finally {
+      setIsLoading(false);
     }
-
-    if (!scanSuccessful) {
-      // Fallback safe result without crashing the component
-      setScanResult({
-        score: 88,
-        matchRate: '94%',
-        matchedSkills: ['React', 'Java', 'SQL', 'Python', 'Spring Boot'],
-        feedback: 'ATS Analysis complete. High keyword alignment with software engineering specifications.'
-      });
-      localStorage.setItem(`resume_score_${studentId}`, 88);
-      localStorage.setItem(`ai_match_rate_${studentId}`, '94%');
-    }
-
-    setIsScanningResume(false);
   };
 
-  const totalApps = data.total_applied;
-
-  const kpis = [
-    { label: 'Applications Applied', value: totalApps, icon: Briefcase, color: '#2563EB', bg: '#DBEAFE' },
-    { label: 'AI Match Score', value: data.ai_match_rate, icon: Sparkles, color: '#7C3AED', bg: '#EDE9FE' },
-    { label: 'ATS Resume Score', value: `${data.resume_score}/100`, icon: FileText, color: '#059669', bg: '#D1FAE5' },
-    { label: 'Saved Internships', value: data.saved_internships, icon: Bookmark, color: '#D97706', bg: '#FEF3C7' },
-    { label: 'Upcoming Interviews', value: data.upcoming_interviews, icon: Calendar, color: '#DC2626', bg: '#FEE2E2' }
-  ];
+  if (isLoading) {
+    return (
+      <div className="glass-card" style={{ padding: '48px', textAlign: 'center', color: 'var(--text-muted)' }}>
+        Loading dashboard metrics & AI skill recommendations...
+      </div>
+    );
+  }
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '24px', maxWidth: '1200px', margin: '0 auto' }}>
-      {/* Top KPI Cards */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: '16px' }}>
-        {kpis.map((kpi, idx) => {
-          const Icon = kpi.icon;
-          return (
-            <div key={idx} className="glass-card" style={{ padding: '20px', display: 'flex', alignItems: 'center', gap: '16px' }}>
-              <div style={{ width: '44px', height: '44px', borderRadius: '10px', background: kpi.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', color: kpi.color }}>
-                <Icon size={22} />
-              </div>
-              <div>
-                <div style={{ fontSize: '1.3rem', fontWeight: 800, color: 'var(--text-main)' }}>{kpi.value}</div>
-                <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>{kpi.label}</div>
-              </div>
-            </div>
-          );
-        })}
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '24px', maxWidth: '1140px', margin: '0 auto' }}>
+      {/* Welcome Banner */}
+      <div className="glass-card" style={{ padding: '28px', background: 'linear-gradient(135deg, #1E293B 0%, #0F172A 100%)', color: '#FFFFFF', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px' }}>
+        <div>
+          <h2 style={{ fontSize: '1.5rem', fontWeight: 800 }}>
+            Welcome back, {currentUser?.name || 'Candidate'}!
+          </h2>
+          <p style={{ fontSize: '0.85rem', color: '#94A3B8', marginTop: '4px' }}>
+            Track your internship applications, ATS resume scores, and live recruitment timelines.
+          </p>
+        </div>
+
+        <button
+          onClick={() => onNavigate('explore')}
+          className="btn-primary"
+          style={{ padding: '10px 20px', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '8px' }}
+        >
+          Explore Open Internships <ArrowRight size={16} />
+        </button>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '24px' }}>
-        {/* Left Column: Recent Applications */}
+      {/* KPI Metric Grid */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '18px' }}>
+        <div className="glass-card" style={{ padding: '20px', borderLeft: '4px solid #2563EB' }}>
+          <div style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)', marginBottom: '6px' }}>TOTAL APPLICATIONS</div>
+          <div style={{ fontSize: '1.8rem', fontWeight: 800, color: 'var(--text-main)' }}>{data.total_applied}</div>
+          <div style={{ fontSize: '0.75rem', color: '#2563EB', marginTop: '4px', fontWeight: 600 }}>Active Candidates</div>
+        </div>
+
+        <div className="glass-card" style={{ padding: '20px', borderLeft: '4px solid #D97706' }}>
+          <div style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)', marginBottom: '6px' }}>SAVED INTERNSHIPS</div>
+          <div style={{ fontSize: '1.8rem', fontWeight: 800, color: '#D97706' }}>{data.saved_internships || 0}</div>
+          <div style={{ fontSize: '0.75rem', color: '#D97706', marginTop: '4px', fontWeight: 600 }}>Bookmarked Opportunities</div>
+        </div>
+
+        <div className="glass-card" style={{ padding: '20px', borderLeft: '4px solid #059669' }}>
+          <div style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)', marginBottom: '6px' }}>RESUME ATS SCORE</div>
+          <div style={{ fontSize: '1.8rem', fontWeight: 800, color: '#059669' }}>{data.resume_score} / 100</div>
+          <div style={{ fontSize: '0.75rem', color: '#059669', marginTop: '4px', fontWeight: 600 }}>ATS Verified</div>
+        </div>
+
+        <div className="glass-card" style={{ padding: '20px', borderLeft: '4px solid #7C3AED' }}>
+          <div style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)', marginBottom: '6px' }}>UPCOMING INTERVIEWS</div>
+          <div style={{ fontSize: '1.8rem', fontWeight: 800, color: '#7C3AED' }}>{data.upcoming_interviews}</div>
+          <div style={{ fontSize: '0.75rem', color: '#7C3AED', marginTop: '4px', fontWeight: 600 }}>Shortlisted Stages</div>
+        </div>
+      </div>
+
+      {/* SIDE-BY-SIDE GRID LAYOUT: Left = Recent Applications, Right = AI Career Advisor */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.1fr', gap: '24px', alignItems: 'start' }}>
+        
+        {/* LEFT COLUMN: Recent Applications Table */}
         <div className="glass-card" style={{ padding: '24px' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-            <div>
-              <h3 style={{ fontSize: '1.2rem', fontWeight: 800, color: 'var(--text-main)' }}>
-                Recent Applications
-              </h3>
-              <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Live candidate submission pipeline connected to Oracle Database</p>
-            </div>
-            {onNavigate && (
-              <button onClick={() => onNavigate('applications')} className="btn-secondary" style={{ padding: '6px 12px', fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                View All <ArrowRight size={14} />
-              </button>
-            )}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+            <h3 style={{ fontSize: '1.1rem', fontWeight: 800, color: 'var(--text-main)' }}>
+              Recent Applications
+            </h3>
+            <button onClick={() => onNavigate('applications')} className="btn-secondary" style={{ padding: '6px 14px', fontSize: '0.8rem' }}>
+              View All
+            </button>
           </div>
 
-          {isLoading ? (
-            <div style={{ padding: '36px', textAlign: 'center', color: 'var(--text-muted)' }}>
-              Loading recent applications from database...
-            </div>
-          ) : data.recent_applications && data.recent_applications.length > 0 ? (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-              {data.recent_applications.map((app, idx) => {
-                const title = app.title || app.job_title || app.role_title || app.JOB_TITLE || app.ROLE_TITLE || 'Software Engineering Intern';
-                const company = app.company_name || app.COMPANY_NAME || 'Partner Enterprise';
-                const loc = app.location || app.LOCATION || 'Bengaluru';
-                const stipend = app.stipend || app.STIPEND || 35000;
-                const status = app.status || app.STATUS || 'APPLIED';
-                const appliedDate = app.applied_at || app.APPLIED_AT || 'Recently';
-                const matchScore = app.match_score || 94;
-
-                const isOffer = status === 'OFFER_SENT' || status === 'HIRED' || status === 'OFFER';
-
-                return (
-                  <div key={app.id || app.ID || idx} style={{ padding: '18px', border: '1px solid var(--border-light)', borderRadius: '10px', background: '#FFFFFF', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '14px' }}>
-                    <div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <h4 style={{ fontWeight: 700, fontSize: '1rem', color: 'var(--text-main)' }}>{title}</h4>
-                        <span className="badge badge-ai" style={{ fontSize: '0.72rem', padding: '2px 8px' }}>
-                          ⚡ {matchScore}% AI Match
-                        </span>
-                      </div>
-                      <div style={{ fontSize: '0.85rem', color: '#2563EB', fontWeight: 600, marginTop: '2px' }}>
-                        {company} • <span style={{ color: 'var(--text-muted)' }}>{loc} • ₹{stipend}/mo</span>
-                      </div>
-                      <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginTop: '4px' }}>
-                        Applied on: <strong>{appliedDate}</strong>
-                      </div>
-                    </div>
-
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                      <span className="badge badge-auth" style={{ textTransform: 'uppercase', fontWeight: 700, padding: '6px 12px', background: isOffer ? '#DCFCE7' : '#DBEAFE', color: isOffer ? '#166534' : '#1E40AF' }}>
-                        {isOffer ? '🎉 Offer Sent' : status}
-                      </span>
-                    </div>
-                  </div>
-                );
-              })}
+          {data.recent_applications.length > 0 ? (
+            <div style={{ overflowX: 'auto' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.82rem' }}>
+                <thead>
+                  <tr style={{ borderBottom: '1px solid var(--border-light)', textAlign: 'left', color: 'var(--text-muted)', fontSize: '0.72rem' }}>
+                    <th style={{ padding: '10px 6px' }}>ROLE TITLE</th>
+                    <th style={{ padding: '10px 6px' }}>COMPANY</th>
+                    <th style={{ padding: '10px 6px' }}>STATUS</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {data.recent_applications.slice(0, 6).map((app, idx) => (
+                    <tr key={idx} style={{ borderBottom: '1px solid var(--border-light)' }}>
+                      <td style={{ padding: '12px 6px', fontWeight: 700, color: 'var(--text-main)' }}>{app.title || app.role_title || 'Unknown Role'}</td>
+                      <td style={{ padding: '12px 6px', color: '#2563EB', fontWeight: 600 }}>{app.company_name || 'Unknown Company'}</td>
+                      <td style={{ padding: '12px 6px' }}>
+                        <span className="badge badge-auth" style={{ fontSize: '0.72rem', padding: '2px 8px' }}>{app.status || 'APPLIED'}</span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
           ) : (
-            <div style={{ padding: '36px', textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.9rem' }}>
-              No recent applications. Explore active internships and apply to get started.
+            <div style={{ textAlign: 'center', padding: '32px 16px', color: 'var(--text-muted)', fontSize: '0.85rem' }}>
+              No applications submitted yet. Click 'Explore Open Internships' to apply.
             </div>
           )}
         </div>
 
-        {/* Right Column: AI Resume Scanner & Match Engine */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
-          <div className="glass-card" style={{ padding: '24px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '14px', color: '#7C3AED', fontWeight: 700 }}>
-              <Sparkles size={18} /> AI Resume Match Scanner
-            </div>
-            <p style={{ fontSize: '0.82rem', color: 'var(--text-muted)', lineHeight: 1.5, marginBottom: '16px' }}>
-              Upload or scan your resume to evaluate ATS keyword match, skill density, and job compatibility.
-            </p>
-
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-              <label style={{ padding: '16px', border: '2px dashed #CBD5E1', borderRadius: '10px', background: '#F8FAFC', textAlign: 'center', cursor: 'pointer', transition: 'border-color 0.2s ease', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px' }}>
-                <Upload size={24} color="#2563EB" />
-                <span style={{ fontSize: '0.82rem', fontWeight: 700, color: 'var(--text-main)' }}>
-                  {uploadedFileName ? uploadedFileName : 'Click to Upload Resume (PDF/DOCX)'}
-                </span>
-                <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>Automated ATS Parser Enabled</span>
-                <input type="file" accept=".pdf,.doc,.docx,.txt" onChange={handleResumeScan} style={{ display: 'none' }} />
-              </label>
-
-              <button
-                type="button"
-                onClick={() => handleResumeScan(null)}
-                disabled={isScanningResume}
-                className="btn-primary"
-                style={{ width: '100%', height: '40px', justifyContent: 'center', fontSize: '0.85rem' }}
-              >
-                {isScanningResume ? 'Scanning with AI...' : 'Scan Resume with AI'}
-              </button>
+        {/* RIGHT COLUMN: ✨ DYNAMIC AI CAREER ADVISOR CARD */}
+        <div className="glass-card" style={{ padding: '24px', border: '1px solid #BFDBFE', background: 'linear-gradient(180deg, #FFFFFF 0%, #F8FAFC 100%)' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px', marginBottom: '16px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <div style={{ padding: '6px', background: '#EFF6FF', borderRadius: '8px', color: '#2563EB' }}>
+                <Sparkles size={20} />
+              </div>
+              <div>
+                <h3 style={{ fontSize: '1.05rem', fontWeight: 800, color: 'var(--text-main)' }}>
+                  AI Career Advisor & Personal Skill Analysis
+                </h3>
+                <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>
+                  Dynamic recommendations for your profile ({profileDegree} • {profileBranch})
+                </p>
+              </div>
             </div>
 
-            {scanResult && (
-              <div style={{ marginTop: '16px', padding: '14px', background: '#F0FDF4', border: '1px solid #BBF7D0', borderRadius: '8px', fontSize: '0.82rem' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
-                  <strong style={{ color: '#166534' }}>✓ ATS Score: {scanResult.score || 88}/100</strong>
-                  <span className="badge badge-ai">{scanResult.matchRate || '94%'} Match</span>
-                </div>
-                <div style={{ color: '#15803D', marginBottom: '6px' }}>{scanResult.feedback}</div>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', marginTop: '6px' }}>
-                  {Array.isArray(scanResult.matchedSkills) && scanResult.matchedSkills.map((sk, i) => (
-                    <span key={i} style={{ background: '#DCFCE7', color: '#166534', padding: '2px 6px', borderRadius: '4px', fontSize: '0.72rem', fontWeight: 600 }}>
-                      {sk}
-                    </span>
+            <button
+              onClick={fetchStudentProfileAndAiRecommendations}
+              className="btn-secondary"
+              style={{ padding: '4px 10px', fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: '4px' }}
+            >
+              <RefreshCw size={12} /> Refresh AI
+            </button>
+          </div>
+
+          {/* Candidate's Unique Database Skills */}
+          <div style={{ padding: '10px 14px', background: '#F1F5F9', borderRadius: '10px', marginBottom: '18px', display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+            <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#475569', display: 'flex', alignItems: 'center', gap: '4px' }}>
+              <Cpu size={14} color="#2563EB" /> Analyzed Database Skills:
+            </span>
+            <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
+              {existingSkills.length > 0 ? (
+                existingSkills.map((sk, i) => (
+                  <span key={i} style={{ padding: '2px 8px', background: '#FFFFFF', color: '#1E293B', borderRadius: '12px', fontSize: '0.72rem', fontWeight: 600, border: '1px solid #CBD5E1' }}>
+                    ✓ {sk}
+                  </span>
+                ))
+              ) : (
+                <span style={{ fontSize: '0.72rem', color: '#64748B' }}>Java, React, Spring Boot, Oracle DB</span>
+              )}
+            </div>
+          </div>
+
+          {isAiAdvisorLoading ? (
+            <div style={{ textAlign: 'center', padding: '28px', color: 'var(--text-muted)', fontSize: '0.82rem' }}>
+              🤖 AI Advisor is evaluating your unique skill profile and generating custom recommendations...
+            </div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+              {/* Section 1: Dynamic Top 3 Recommended Courses */}
+              <div>
+                <h4 style={{ fontSize: '0.9rem', fontWeight: 800, color: 'var(--text-main)', marginBottom: '10px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <BookOpen size={16} color="#2563EB" /> Top 3 Tailored AI-Recommended Courses
+                </h4>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                  {recommendedCourses.map((c, i) => (
+                    <div key={c.id || i} style={{ padding: '12px 14px', background: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: '10px', boxShadow: '0 1px 3px rgba(0,0,0,0.02)' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '8px' }}>
+                        <div>
+                          <h5 style={{ fontSize: '0.85rem', fontWeight: 800, color: 'var(--text-main)' }}>{c.title}</h5>
+                          <div style={{ fontSize: '0.74rem', color: '#2563EB', fontWeight: 600, marginTop: '2px' }}>
+                            {c.provider} • ⏱️ {c.duration || '4 Weeks'}
+                          </div>
+                        </div>
+
+                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '6px' }}>
+                          <span style={{ fontSize: '0.68rem', fontWeight: 700, padding: '2px 6px', borderRadius: '8px', background: '#EFF6FF', color: '#1D4ED8', whiteSpace: 'nowrap' }}>
+                            {c.badge || 'Tailored'}
+                          </span>
+                          <a
+                            href={c.url || 'https://www.coursera.org/'}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="btn-secondary"
+                            style={{
+                              padding: '4px 10px',
+                              fontSize: '0.72rem',
+                              fontWeight: 700,
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '4px',
+                              textDecoration: 'none',
+                              borderRadius: '6px',
+                              borderColor: '#CBD5E1',
+                              color: '#1E293B',
+                              background: '#F8FAFC',
+                              whiteSpace: 'nowrap'
+                            }}
+                          >
+                            View Course <ExternalLink size={12} />
+                          </a>
+                        </div>
+                      </div>
+                      <p style={{ fontSize: '0.74rem', color: '#64748B', marginTop: '6px', lineHeight: '1.35' }}>
+                        💡 <strong>AI Analysis:</strong> {c.reason}
+                      </p>
+                    </div>
                   ))}
                 </div>
               </div>
-            )}
-          </div>
 
-          <div className="glass-card" style={{ padding: '24px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '16px', color: '#059669', fontWeight: 700 }}>
-              <TrendingUp size={18} /> Recruitment Pipeline Tracker
+              {/* Section 2: Dynamic Top 3 Online Certifications with External Redirect Buttons */}
+              <div>
+                <h4 style={{ fontSize: '0.9rem', fontWeight: 800, color: 'var(--text-main)', marginBottom: '10px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <Award size={16} color="#D97706" /> Top 3 Recognized Professional Certifications
+                </h4>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                  {recommendedCertifications.map((cert, i) => (
+                    <div key={cert.id || i} style={{ padding: '12px 14px', background: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: '10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px', boxShadow: '0 1px 3px rgba(0,0,0,0.02)' }}>
+                      <div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          <ShieldCheck size={14} color={cert.color || '#2563EB'} />
+                          <span style={{ fontSize: '0.72rem', fontWeight: 700, color: cert.color || '#2563EB' }}>{cert.issuer}</span>
+                        </div>
+                        <h5 style={{ fontSize: '0.85rem', fontWeight: 800, color: 'var(--text-main)', marginTop: '2px' }}>{cert.name}</h5>
+                      </div>
+
+                      <a
+                        href={cert.url || 'https://aws.amazon.com/certification/'}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="btn-secondary"
+                        style={{
+                          padding: '6px 12px',
+                          fontSize: '0.75rem',
+                          fontWeight: 700,
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '4px',
+                          textDecoration: 'none',
+                          borderRadius: '6px',
+                          borderColor: '#CBD5E1',
+                          color: '#1E293B',
+                          background: '#F8FAFC',
+                          whiteSpace: 'nowrap'
+                        }}
+                      >
+                        Apply <ExternalLink size={12} />
+                      </a>
+                    </div>
+                  ))}
+                </div>
+              </div>
             </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', fontSize: '0.85rem' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <span style={{ color: 'var(--text-muted)' }}>Applications Sent</span>
-                <strong>{totalApps}</strong>
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <span style={{ color: 'var(--text-muted)' }}>Screening Tests Passed</span>
-                <strong>{data.upcoming_interviews}</strong>
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <span style={{ color: 'var(--text-muted)' }}>Offers Dispatched</span>
-                <strong style={{ color: '#059669' }}>{data.recent_applications.filter(a => (a.status || a.STATUS) === 'OFFER_SENT' || (a.status || a.STATUS) === 'HIRED').length}</strong>
-              </div>
-            </div>
-          </div>
+          )}
         </div>
+
       </div>
     </div>
   );

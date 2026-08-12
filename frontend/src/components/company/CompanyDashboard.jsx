@@ -1,8 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { Briefcase, Users, CheckCircle2, TrendingUp, Plus, Search, Edit3, Trash2, MapPin, DollarSign, Clock, AlertCircle, ArrowRight } from 'lucide-react';
+import { Briefcase, Users, CheckCircle2, TrendingUp, Plus, Search, Edit3, Trash2, MapPin, DollarSign, Clock, AlertCircle, ArrowRight, Calendar, Tag, ShieldCheck, X } from 'lucide-react';
+import API_CONFIG from '../../config/apiConfig';
 
-export default function CompanyDashboard({ apiBaseUrl = 'http://localhost:8083', currentUser, onNavigate }) {
+export default function CompanyDashboard({ currentUser, onNavigate }) {
   const companyId = currentUser?.userId || currentUser?.user_id || currentUser?.id || currentUser?.ID;
+  const token = currentUser?.token || '';
+  const baseUrl = API_CONFIG.COMPANY_SERVICE_URL;
 
   if (!companyId) {
     return (
@@ -19,14 +22,12 @@ export default function CompanyDashboard({ apiBaseUrl = 'http://localhost:8083',
   const [internships, setInternships] = useState([]);
   const [applicantCount, setApplicantCount] = useState(0);
   const [shortlistedCount, setShortlistedCount] = useState(0);
-  const [offersCount, setOffersCount] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
-  const [editingJob, setEditingJob] = useState(null);
-  const [editTitle, setEditTitle] = useState('');
-  const [editStipend, setEditStipend] = useState('');
-  const [editLocation, setEditLocation] = useState('');
-  const [editSkills, setEditSkills] = useState('');
-  const [statusMsg, setStatusMsg] = useState('');
+
+  // Edit Modal State
+  const [editModalJob, setEditModalJob] = useState(null);
+  const [isSavingEdit, setIsSavingEdit] = useState(false);
+  const [editStatusMsg, setEditStatusMsg] = useState('');
 
   useEffect(() => {
     fetchCompanyData();
@@ -35,247 +36,412 @@ export default function CompanyDashboard({ apiBaseUrl = 'http://localhost:8083',
   const fetchCompanyData = async () => {
     setIsLoading(true);
 
-    const endpoints = [
-      `${apiBaseUrl}/api/v1/company/${companyId}/internships`,
-      `http://localhost:8083/api/v1/company/${companyId}/internships`,
-      `http://localhost:8000/api/v1/company/${companyId}/internships`
-    ];
-
-    let foundJobs = null;
-    for (const url of endpoints) {
-      try {
-        const res = await fetch(url);
-        if (res.ok) {
-          const data = await res.json();
-          if (data && Array.isArray(data)) {
-            foundJobs = data;
-            break;
-          }
-        }
-      } catch (e) {
-        console.error("Company internships fetch error:", e);
-      }
-    }
-
-    setInternships(foundJobs || []);
-
     try {
-      const appRes = await fetch(`http://localhost:8083/api/v1/company/${companyId}/applicants`);
+      let activeJobs = [];
+      const res = await fetch(`${baseUrl}/api/v1/company/${companyId}/internships`, {
+        headers: {
+          'Authorization': token,
+          'Content-Type': 'application/json'
+        }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        activeJobs = Array.isArray(data) ? data : [];
+        setInternships(activeJobs);
+      }
+
+      const appRes = await fetch(`${baseUrl}/api/v1/company/${companyId}/applicants`, {
+        headers: { 'Authorization': token }
+      });
       if (appRes.ok) {
         const apps = await appRes.json();
-        if (apps && Array.isArray(apps)) {
-          setApplicantCount(apps.length);
-          setShortlistedCount(apps.filter(a => (a.status || a.STATUS) === 'SHORTLISTED' || (a.status || a.STATUS) === 'TEST_PASSED').length);
-          setOffersCount(apps.filter(a => (a.status || a.STATUS) === 'OFFER_SENT' || (a.status || a.STATUS) === 'HIRED').length);
+        if (Array.isArray(apps)) {
+          const countToUse = apps.length;
+          setApplicantCount(countToUse);
+          setShortlistedCount(apps.filter(a => ['SHORTLISTED', 'OFFERED', 'OFFER_ISSUED', 'ACCEPTED'].includes((a.status || a.STATUS || '').toUpperCase())).length);
         }
       }
-    } catch (e) {}
-
-    setIsLoading(false);
+    } catch (e) {
+      console.error("Company dashboard fetch error:", e);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
-  const handleDelete = async (jobId) => {
-    if (!window.confirm("Are you sure you want to delete this internship posting?")) return;
+  const handleOpenEditModal = (job) => {
+    setEditModalJob({
+      id: job.id || job.ID,
+      title: job.title || job.TITLE || '',
+      domain: job.domain || job.DOMAIN || 'Engineering',
+      required_skills: job.required_skills || job.REQUIRED_SKILLS || job.skills_required || job.skills || '',
+      work_mode: job.work_mode || job.WORK_MODE || 'Hybrid',
+      location: job.location || job.LOCATION || 'Coimbatore',
+      duration: job.duration || job.DURATION || '3 Months',
+      stipend: job.stipend !== undefined ? job.stipend : (job.STIPEND || 0),
+      openings: job.openings !== undefined ? job.openings : (job.OPENINGS || 1),
+      application_deadline: job.application_deadline || job.APPLICATION_DEADLINE || job.deadline || ''
+    });
+    setEditStatusMsg('');
+  };
+
+  const handleSaveEdit = async (e) => {
+    e.preventDefault();
+    if (!editModalJob) return;
+
+    setIsSavingEdit(true);
+    setEditStatusMsg('Saving changes...');
 
     try {
-      await fetch(`http://localhost:8083/api/v1/company/internships/${jobId}`, { method: 'DELETE' });
-    } catch (e) {}
-
-    setInternships(prev => prev.filter(j => (j.id || j.ID) !== jobId));
-    setStatusMsg("Internship posting deleted from database.");
-    setTimeout(() => setStatusMsg(''), 4000);
-  };
-
-  const handleEditClick = (job) => {
-    setEditingJob(job);
-    setEditTitle(job.title || job.TITLE || '');
-    setEditStipend(job.stipend || job.STIPEND || 35000);
-    setEditLocation(job.location || job.LOCATION || 'Bengaluru');
-    setEditSkills(job.required_skills || job.REQUIRED_SKILLS || '');
-  };
-
-  const handleSaveEdit = async () => {
-    if (!editingJob) return;
-    const jobId = editingJob.id || editingJob.ID;
-
-    const payload = {
-      title: editTitle,
-      stipend: parseFloat(editStipend) || 35000,
-      location: editLocation,
-      required_skills: editSkills
-    };
-
-    try {
-      await fetch(`http://localhost:8083/api/v1/company/internships/${jobId}`, {
+      const res = await fetch(`${baseUrl}/api/v1/company/internships/${editModalJob.id}`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': token
+        },
+        body: JSON.stringify(editModalJob)
       });
-    } catch (e) {}
 
-    setInternships(prev => prev.map(j => {
-      if ((j.id || j.ID) === jobId) {
-        return { ...j, ...payload };
+      const data = await res.json().catch(() => null);
+
+      if (res.ok && (data?.success || data?.status === 'success' || res.status === 200)) {
+        setEditStatusMsg('✓ Internship updated successfully!');
+        setTimeout(() => {
+          setEditModalJob(null);
+          fetchCompanyData();
+        }, 1200);
+      } else {
+        setEditStatusMsg('❌ ' + (data?.error || data?.message || 'Failed to update internship.'));
       }
-      return j;
-    }));
-
-    setEditingJob(null);
-    setStatusMsg("Internship posting updated successfully in database.");
-    setTimeout(() => setStatusMsg(''), 4000);
+    } catch (err) {
+      setEditStatusMsg('❌ Connection error updating internship.');
+    } finally {
+      setIsSavingEdit(false);
+    }
   };
 
-  const kpis = [
-    { label: 'Active Internships', value: internships.length, icon: Briefcase, color: '#2563EB', bg: '#DBEAFE' },
-    { label: 'Total Applicants', value: applicantCount, icon: Users, color: '#7C3AED', bg: '#EDE9FE' },
-    { label: 'Shortlisted Candidates', value: shortlistedCount, icon: TrendingUp, color: '#D97706', bg: '#FEF3C7' },
-    { label: 'Offers Dispatched', value: offersCount, icon: CheckCircle2, color: '#059669', bg: '#D1FAE5' }
-  ];
+  const handleDeleteInternship = async (job) => {
+    const jobId = job.id || job.ID;
+    const jobTitle = job.title || job.TITLE || 'this internship';
+    if (!window.confirm(`Are you sure you want to delete "${jobTitle}"? This action will remove the listing across all portals.`)) {
+      return;
+    }
+
+    try {
+      const res = await fetch(`${baseUrl}/api/v1/company/internships/${jobId}`, {
+        method: 'DELETE',
+        headers: { 'Authorization': token }
+      });
+
+      if (res.ok) {
+        alert(`✓ Internship "${jobTitle}" deleted successfully.`);
+        fetchCompanyData();
+      } else {
+        alert('❌ Failed to delete internship.');
+      }
+    } catch (err) {
+      alert('❌ Connection error deleting internship.');
+    }
+  };
+
+  if (isLoading) {
+    return (
+      <div className="glass-card" style={{ padding: '48px', textAlign: 'center', color: 'var(--text-muted)' }}>
+        Loading recruiter dashboard...
+      </div>
+    );
+  }
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '24px', maxWidth: '1200px', margin: '0 auto' }}>
-      {/* Top KPI Cards */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px' }}>
-        {kpis.map((kpi, idx) => {
-          const Icon = kpi.icon;
-          return (
-            <div key={idx} className="glass-card" style={{ padding: '20px', display: 'flex', alignItems: 'center', gap: '16px' }}>
-              <div style={{ width: '46px', height: '46px', borderRadius: '10px', background: kpi.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', color: kpi.color }}>
-                <Icon size={22} />
-              </div>
-              <div>
-                <div style={{ fontSize: '1.4rem', fontWeight: 900, color: 'var(--text-main)' }}>{kpi.value}</div>
-                <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>{kpi.label}</div>
-              </div>
-            </div>
-          );
-        })}
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+      {/* Banner */}
+      <div className="glass-card" style={{ padding: '28px', background: 'linear-gradient(135deg, #1E293B 0%, #0F172A 100%)', color: '#FFFFFF', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px' }}>
+        <div>
+          <h2 style={{ fontSize: '1.5rem', fontWeight: 800 }}>
+            {currentUser?.name || 'Recruiter Portal'}
+          </h2>
+          <p style={{ fontSize: '0.85rem', color: '#94A3B8', marginTop: '4px' }}>
+            Manage active internship listings, evaluate applicants, and generate screening tests.
+          </p>
+        </div>
+
+        <button
+          onClick={() => onNavigate('post')}
+          className="btn-primary"
+          style={{ padding: '10px 20px', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '8px' }}
+        >
+          <Plus size={16} /> Post New Internship
+        </button>
       </div>
 
-      {statusMsg && (
-        <div style={{ padding: '12px 18px', background: '#DCFCE7', border: '1px solid #86EFAC', color: '#166534', borderRadius: '8px', fontSize: '0.88rem', fontWeight: 600 }}>
-          ✓ {statusMsg}
-        </div>
-      )}
-
-      {/* Internships Management Section */}
-      <div className="glass-card" style={{ padding: '28px' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', flexWrap: 'wrap', gap: '14px' }}>
-          <div>
-            <h2 style={{ fontSize: '1.3rem', fontWeight: 800, color: 'var(--text-main)' }}>
-              Active Internship Postings
-            </h2>
-            <p style={{ fontSize: '0.82rem', color: 'var(--text-muted)' }}>
-              Manage recruitment drives, update requirements, and view candidate submissions
-            </p>
-          </div>
-
-          <div style={{ display: 'flex', gap: '10px' }}>
-            {onNavigate && (
-              <>
-                <button onClick={() => onNavigate('applicants')} className="btn-secondary" style={{ padding: '8px 14px', fontSize: '0.82rem', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <Users size={15} /> View Applicants
-                </button>
-                <button onClick={() => onNavigate('post-internship')} className="btn-primary" style={{ padding: '8px 14px', fontSize: '0.82rem', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <Plus size={15} /> Post New Internship
-                </button>
-              </>
-            )}
-          </div>
+      {/* KPI Cards */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '18px' }}>
+        <div className="glass-card" style={{ padding: '20px', borderLeft: '4px solid #2563EB' }}>
+          <div style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)', marginBottom: '6px' }}>ACTIVE LISTINGS</div>
+          <div style={{ fontSize: '1.8rem', fontWeight: 800, color: 'var(--text-main)' }}>{internships.length}</div>
+          <div style={{ fontSize: '0.75rem', color: '#2563EB', marginTop: '4px', fontWeight: 600 }}>Posted Jobs</div>
         </div>
 
-        {isLoading ? (
-          <div style={{ padding: '48px', textAlign: 'center', color: 'var(--text-muted)' }}>
-            Loading company internships from database...
-          </div>
-        ) : internships.length > 0 ? (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-            {internships.map((job) => {
-              const jobId = job.id || job.ID;
-              const title = job.title || job.TITLE || 'Software Intern';
-              const domain = job.domain || job.DOMAIN || 'Technology';
-              const stipend = job.stipend || job.STIPEND || 35000;
-              const loc = job.location || job.LOCATION || 'Bengaluru';
-              const duration = job.duration || job.DURATION || '3 Months';
-              const mode = job.work_mode || job.WORK_MODE || 'Hybrid';
-              const openings = job.openings || job.OPENINGS || 5;
-              const deadline = job.application_deadline || job.APPLICATION_DEADLINE || '2026-07-30';
-              const skills = job.required_skills || job.REQUIRED_SKILLS || 'React, Java, SQL';
+        <div className="glass-card" style={{ padding: '20px', borderLeft: '4px solid #D97706' }}>
+          <div style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)', marginBottom: '6px' }}>TOTAL APPLICANTS</div>
+          <div style={{ fontSize: '1.8rem', fontWeight: 800, color: '#D97706' }}>{applicantCount}</div>
+          <div style={{ fontSize: '0.75rem', color: '#D97706', marginTop: '4px', fontWeight: 600 }}>Candidate Applications</div>
+        </div>
+
+        <div className="glass-card" style={{ padding: '20px', borderLeft: '4px solid #059669' }}>
+          <div style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)', marginBottom: '6px' }}>SHORTLISTED CANDIDATES</div>
+          <div style={{ fontSize: '1.8rem', fontWeight: 800, color: '#059669' }}>{shortlistedCount}</div>
+          <div style={{ fontSize: '0.75rem', color: '#059669', marginTop: '4px', fontWeight: 600 }}>Qualified for Interview</div>
+        </div>
+      </div>
+
+      {/* Posted / Active Internships List */}
+      <div className="glass-card" style={{ padding: '24px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+          <h3 style={{ fontSize: '1.15rem', fontWeight: 800, color: 'var(--text-main)' }}>
+            Posted / Active Internships ({internships.length})
+          </h3>
+          <button onClick={() => onNavigate('applicants')} className="btn-secondary" style={{ padding: '6px 14px', fontSize: '0.8rem' }}>
+            Review Applicants
+          </button>
+        </div>
+
+        {internships.length > 0 ? (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
+            {internships.map((job, idx) => {
+              const title = job.title || job.TITLE || 'Internship Role';
+              const companyName = job.company_name || job.COMPANY_NAME || currentUser?.name || 'Company Partner';
+              const domain = job.domain || job.DOMAIN || 'Engineering';
+              const rawSkills = job.required_skills || job.REQUIRED_SKILLS || job.skills_required || job.skills || '';
+              const skillList = typeof rawSkills === 'string'
+                ? rawSkills.split(',').map(s => s.trim()).filter(Boolean)
+                : (Array.isArray(rawSkills) ? rawSkills : []);
+              const location = job.location || job.LOCATION || 'Not Specified';
+              const workMode = job.work_mode || job.WORK_MODE || 'Hybrid';
+              const duration = job.duration || job.DURATION || 'Not Specified';
+              const startDate = job.start_date || job.START_DATE || '';
+              const endDate = job.end_date || job.END_DATE || '';
+              const stipendNum = job.stipend !== undefined ? job.stipend : (job.STIPEND !== undefined ? job.STIPEND : 0);
+              const stipendFormatted = typeof stipendNum === 'number' ? `₹${stipendNum.toLocaleString()}/month` : `₹${stipendNum}`;
+              const openings = job.openings !== undefined ? job.openings : (job.OPENINGS !== undefined ? job.OPENINGS : 1);
+              const deadline = job.application_deadline || job.APPLICATION_DEADLINE || job.deadline || '';
+              const status = (job.status || job.STATUS || 'ACTIVE').toUpperCase();
 
               return (
-                <div key={jobId} style={{ padding: '20px', border: '1px solid var(--border-light)', borderRadius: '10px', background: '#FFFFFF', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '16px' }}>
-                  <div style={{ flex: 1, minWidth: '300px' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                      <h3 style={{ fontSize: '1.15rem', fontWeight: 800, color: 'var(--text-main)' }}>{title}</h3>
-                      <span className="badge badge-ai" style={{ fontSize: '0.72rem' }}>{domain}</span>
+                <div key={idx} style={{ padding: '20px', border: '1px solid var(--border-light)', borderRadius: '12px', background: '#FFFFFF', display: 'flex', flexDirection: 'column', gap: '14px', boxShadow: '0 2px 4px rgba(0,0,0,0.02)' }}>
+                  {/* Title & Header Row */}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '10px' }}>
+                    <div>
+                      <h4 style={{ fontWeight: 800, fontSize: '1.1rem', color: 'var(--text-main)', margin: 0 }}>
+                        {title}
+                      </h4>
+                      <div style={{ fontSize: '0.88rem', color: '#2563EB', fontWeight: 700, marginTop: '4px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <span>{companyName}</span>
+                        {domain && (
+                          <span style={{ fontSize: '0.75rem', background: '#EFF6FF', color: '#1E40AF', padding: '2px 8px', borderRadius: '4px', border: '1px solid #BFDBFE' }}>
+                            {domain}
+                          </span>
+                        )}
+                      </div>
                     </div>
 
-                    <div style={{ display: 'flex', gap: '14px', fontSize: '0.82rem', color: 'var(--text-muted)', marginTop: '8px', flexWrap: 'wrap' }}>
-                      <span>📍 {loc} ({mode})</span>
-                      <span>⏱️ {duration}</span>
-                      <span>💵 ₹{stipend}/mo</span>
-                      <span>👥 {openings} Openings</span>
-                      <span>📅 Deadline: {deadline}</span>
-                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <span className="badge badge-auth" style={{ fontSize: '0.78rem', padding: '4px 10px' }}>
+                        {workMode}
+                      </span>
+                      <span style={{ fontSize: '0.78rem', padding: '4px 10px', borderRadius: '6px', fontWeight: 700, background: status === 'ACTIVE' ? '#DCFCE7' : '#F1F5F9', color: status === 'ACTIVE' ? '#166534' : '#64748B' }}>
+                        {status}
+                      </span>
 
-                    <div style={{ fontSize: '0.78rem', color: 'var(--text-sub)', marginTop: '8px' }}>
-                      <strong>Required Skills:</strong> {skills}
+                      {/* Recruiter Edit Button */}
+                      <button
+                        onClick={() => handleOpenEditModal(job)}
+                        title="Edit Internship Details"
+                        style={{ background: '#EFF6FF', border: '1px solid #BFDBFE', color: '#1D4ED8', padding: '6px 12px', borderRadius: '6px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.78rem', fontWeight: 700 }}
+                      >
+                        <Edit3 size={14} /> Edit
+                      </button>
+
+                      {/* Recruiter Delete Button */}
+                      <button
+                        onClick={() => handleDeleteInternship(job)}
+                        title="Delete Internship Listing"
+                        style={{ background: '#FEF2F2', border: '1px solid #FCA5A5', color: '#DC2626', padding: '6px 12px', borderRadius: '6px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.78rem', fontWeight: 700 }}
+                      >
+                        <Trash2 size={14} /> Delete
+                      </button>
                     </div>
                   </div>
 
-                  <div style={{ display: 'flex', gap: '8px' }}>
-                    <button onClick={() => handleEditClick(job)} className="btn-secondary" style={{ padding: '6px 12px', fontSize: '0.78rem', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                      <Edit3 size={13} /> Edit
-                    </button>
-                    <button onClick={() => handleDelete(jobId)} className="btn-ghost" style={{ padding: '6px 10px', fontSize: '0.78rem', color: '#DC2626', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                      <Trash2 size={13} /> Delete
-                    </button>
+                  {/* Skills Pills */}
+                  {skillList.length > 0 && (
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                      {skillList.map((skill, sIdx) => (
+                        <span key={sIdx} style={{ fontSize: '0.75rem', fontWeight: 600, background: '#F1F5F9', color: '#334155', padding: '3px 10px', borderRadius: '12px', border: '1px solid #E2E8F0' }}>
+                          {skill}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Detailed Metadata Grid */}
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '10px', fontSize: '0.82rem', color: 'var(--text-muted)', background: '#F8FAFC', padding: '12px 14px', borderRadius: '8px' }}>
+                    <div>📍 <strong>Location:</strong> {location}</div>
+                    <div>🏢 <strong>Work Mode:</strong> {workMode}</div>
+                    <div>⏱️ <strong>Duration:</strong> {duration}</div>
+                    <div>💰 <strong>Stipend:</strong> {stipendFormatted}</div>
+                    <div>👥 <strong>Openings:</strong> {openings}</div>
+                    {deadline && <div>⏳ <strong>Deadline:</strong> {deadline}</div>}
+                    {startDate && <div>📅 <strong>Start Date:</strong> {startDate}</div>}
+                    {endDate && <div>🏁 <strong>End Date:</strong> {endDate}</div>}
                   </div>
                 </div>
               );
             })}
           </div>
         ) : (
-          <div style={{ padding: '48px', textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.95rem' }}>
-            No active internships posted yet. Click 'Post New Internship' to create your first recruitment drive.
+          <div style={{ textAlign: 'center', padding: '36px 16px', color: 'var(--text-muted)', fontSize: '0.85rem' }}>
+            No internship listings posted yet. Click 'Post New Internship' to create your first listing.
           </div>
         )}
       </div>
 
-      {/* Edit Internship Modal */}
-      {editingJob && (
-        <div style={{ position: 'fixed', inset: 0, zIndex: 1000, background: 'rgba(15,23,42,0.5)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
-          <div className="glass-card" style={{ background: '#FFFFFF', width: '100%', maxWidth: '520px', padding: '28px', borderRadius: '14px' }}>
-            <h3 style={{ fontSize: '1.2rem', fontWeight: 800, color: 'var(--text-main)', marginBottom: '16px' }}>
-              Edit Internship Listing
-            </h3>
-
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', fontSize: '0.85rem' }}>
-              <div>
-                <label style={{ fontSize: '0.75rem', fontWeight: 700, display: 'block', marginBottom: '4px' }}>POSITION TITLE</label>
-                <input type="text" className="input-field" value={editTitle} onChange={(e) => setEditTitle(e.target.value)} />
+      {/* Recruiter Edit Internship Modal */}
+      {editModalJob && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(15, 23, 42, 0.65)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1100, padding: '20px' }}>
+          <div className="glass-card" style={{ background: '#FFFFFF', width: '100%', maxWidth: '580px', borderRadius: '16px', padding: '28px', boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.2)', display: 'flex', flexDirection: 'column', gap: '20px', maxHeight: '90vh', overflowY: 'auto' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #E2E8F0', paddingBottom: '14px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <div style={{ width: '38px', height: '38px', borderRadius: '10px', background: '#EFF6FF', color: '#2563EB', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <Edit3 size={20} />
+                </div>
+                <div>
+                  <h3 style={{ fontSize: '1.15rem', fontWeight: 800, color: 'var(--text-main)', margin: 0 }}>
+                    Edit Internship Listing
+                  </h3>
+                  <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)', margin: 0 }}>
+                    Update job details for candidate explore portal
+                  </p>
+                </div>
               </div>
-
-              <div>
-                <label style={{ fontSize: '0.75rem', fontWeight: 700, display: 'block', marginBottom: '4px' }}>STIPEND (₹/MONTH)</label>
-                <input type="number" className="input-field" value={editStipend} onChange={(e) => setEditStipend(e.target.value)} />
-              </div>
-
-              <div>
-                <label style={{ fontSize: '0.75rem', fontWeight: 700, display: 'block', marginBottom: '4px' }}>LOCATION</label>
-                <input type="text" className="input-field" value={editLocation} onChange={(e) => setEditLocation(e.target.value)} />
-              </div>
-
-              <div>
-                <label style={{ fontSize: '0.75rem', fontWeight: 700, display: 'block', marginBottom: '4px' }}>REQUIRED SKILLS</label>
-                <input type="text" className="input-field" value={editSkills} onChange={(e) => setEditSkills(e.target.value)} />
-              </div>
-
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '12px' }}>
-                <button onClick={() => setEditingJob(null)} className="btn-secondary">Cancel</button>
-                <button onClick={handleSaveEdit} className="btn-primary">Save Changes</button>
-              </div>
+              <button onClick={() => setEditModalJob(null)} style={{ border: 'none', background: 'none', cursor: 'pointer', color: '#64748B' }}>
+                <X size={20} />
+              </button>
             </div>
+
+            <form onSubmit={handleSaveEdit} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+              <div>
+                <label style={{ fontSize: '0.8rem', fontWeight: 700, color: '#334155', display: 'block', marginBottom: '4px' }}>Role Title</label>
+                <input
+                  type="text"
+                  className="input-field"
+                  value={editModalJob.title}
+                  onChange={(e) => setEditModalJob({ ...editModalJob, title: e.target.value })}
+                  required
+                />
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                <div>
+                  <label style={{ fontSize: '0.8rem', fontWeight: 700, color: '#334155', display: 'block', marginBottom: '4px' }}>Domain / Field</label>
+                  <input
+                    type="text"
+                    className="input-field"
+                    value={editModalJob.domain}
+                    onChange={(e) => setEditModalJob({ ...editModalJob, domain: e.target.value })}
+                    required
+                  />
+                </div>
+                <div>
+                  <label style={{ fontSize: '0.8rem', fontWeight: 700, color: '#334155', display: 'block', marginBottom: '4px' }}>Work Mode</label>
+                  <select
+                    className="input-field"
+                    value={editModalJob.work_mode}
+                    onChange={(e) => setEditModalJob({ ...editModalJob, work_mode: e.target.value })}
+                  >
+                    <option value="Hybrid">Hybrid</option>
+                    <option value="On-site">On-site</option>
+                    <option value="Remote">Remote</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label style={{ fontSize: '0.8rem', fontWeight: 700, color: '#334155', display: 'block', marginBottom: '4px' }}>Required Skills (comma separated)</label>
+                <input
+                  type="text"
+                  className="input-field"
+                  value={editModalJob.required_skills}
+                  onChange={(e) => setEditModalJob({ ...editModalJob, required_skills: e.target.value })}
+                />
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                <div>
+                  <label style={{ fontSize: '0.8rem', fontWeight: 700, color: '#334155', display: 'block', marginBottom: '4px' }}>Location</label>
+                  <input
+                    type="text"
+                    className="input-field"
+                    value={editModalJob.location}
+                    onChange={(e) => setEditModalJob({ ...editModalJob, location: e.target.value })}
+                  />
+                </div>
+                <div>
+                  <label style={{ fontSize: '0.8rem', fontWeight: 700, color: '#334155', display: 'block', marginBottom: '4px' }}>Duration</label>
+                  <input
+                    type="text"
+                    className="input-field"
+                    value={editModalJob.duration}
+                    onChange={(e) => setEditModalJob({ ...editModalJob, duration: e.target.value })}
+                  />
+                </div>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                <div>
+                  <label style={{ fontSize: '0.8rem', fontWeight: 700, color: '#334155', display: 'block', marginBottom: '4px' }}>Stipend (₹/month)</label>
+                  <input
+                    type="number"
+                    className="input-field"
+                    value={editModalJob.stipend}
+                    onChange={(e) => setEditModalJob({ ...editModalJob, stipend: Number(e.target.value) })}
+                  />
+                </div>
+                <div>
+                  <label style={{ fontSize: '0.8rem', fontWeight: 700, color: '#334155', display: 'block', marginBottom: '4px' }}>Openings</label>
+                  <input
+                    type="number"
+                    className="input-field"
+                    value={editModalJob.openings}
+                    onChange={(e) => setEditModalJob({ ...editModalJob, openings: Number(e.target.value) })}
+                  />
+                </div>
+              </div>
+
+              {editStatusMsg && (
+                <div style={{ fontSize: '0.82rem', fontWeight: 700, color: editStatusMsg.includes('✓') ? '#059669' : '#DC2626', textAlign: 'center', padding: '6px' }}>
+                  {editStatusMsg}
+                </div>
+              )}
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '10px' }}>
+                <button
+                  type="button"
+                  onClick={() => setEditModalJob(null)}
+                  className="btn-secondary"
+                  style={{ padding: '8px 16px', fontSize: '0.85rem' }}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSavingEdit}
+                  className="btn-primary"
+                  style={{ padding: '8px 20px', fontSize: '0.85rem' }}
+                >
+                  {isSavingEdit ? 'Saving...' : 'Save Changes'}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

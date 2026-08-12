@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Bot, X, Send, Sparkles } from 'lucide-react';
+import API_CONFIG from '../../config/apiConfig';
 
 export default function AIChatAssistant() {
   const [isOpen, setIsOpen] = useState(false);
@@ -8,6 +9,8 @@ export default function AIChatAssistant() {
     { sender: 'ai', text: 'Hello! I am your InternMatch AI Assistant powered by Groq LLM. How can I help with your internship applications, resume ATS, or screening exams today?' }
   ]);
   const [loading, setLoading] = useState(false);
+
+  const aiApiUrl = API_CONFIG.AI_SERVICE_URL;
 
   const handleSend = async (e) => {
     e.preventDefault();
@@ -19,19 +22,19 @@ export default function AIChatAssistant() {
     setLoading(true);
 
     try {
-      const res = await fetch('http://localhost:8000/api/v1/ai/chat', {
+      const res = await fetch(`${aiApiUrl}/api/v1/ai/chat`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ message: userText })
       });
       if (res.ok) {
         const data = await res.json();
-        setMessages((prev) => [...prev, { sender: 'ai', text: data.reply }]);
+        setMessages((prev) => [...prev, { sender: 'ai', text: data.reply || data.response }]);
       } else {
-        setMessages((prev) => [...prev, { sender: 'ai', text: 'To boost your application match rate, highlight Spring Boot, React, and MySQL on your profile!' }]);
+        setMessages((prev) => [...prev, { sender: 'ai', text: 'To boost your application match rate, highlight Spring Boot, React, and SQL on your profile!' }]);
       }
     } catch (err) {
-      setMessages((prev) => [...prev, { sender: 'ai', text: 'To boost your application match rate, highlight Spring Boot, React, and MySQL on your profile!' }]);
+      setMessages((prev) => [...prev, { sender: 'ai', text: 'To boost your application match rate, highlight Spring Boot, React, and SQL on your profile!' }]);
     } finally {
       setLoading(false);
     }
@@ -45,83 +48,79 @@ export default function AIChatAssistant() {
           position: 'fixed',
           bottom: '24px',
           right: '24px',
-          width: '56px',
-          height: '56px',
+          padding: '14px',
           borderRadius: '50%',
-          background: '#2563EB',
+          background: 'linear-gradient(135deg, #2563EB 0%, #1D4ED8 100%)',
           color: '#FFFFFF',
           border: 'none',
-          boxShadow: '0 4px 14px rgba(37,99,235,0.3)',
+          boxShadow: '0 10px 25px -5px rgba(37, 99, 235, 0.4)',
           cursor: 'pointer',
+          zIndex: 999,
           display: 'flex',
           alignItems: 'center',
-          justifyContent: 'center',
-          zIndex: 1000
+          justifyContent: 'center'
         }}
       >
-        {isOpen ? <X size={24} /> : <Bot size={26} />}
+        <Bot size={24} />
       </button>
 
       {isOpen && (
         <div
+          className="glass-card"
           style={{
             position: 'fixed',
-            bottom: '90px',
+            bottom: '84px',
             right: '24px',
-            width: '380px',
-            height: '500px',
-            background: '#FFFFFF',
-            borderRadius: '12px',
-            boxShadow: '0 8px 30px rgba(0,0,0,0.12)',
-            border: '1px solid var(--border-light)',
+            width: '350px',
+            height: '460px',
             display: 'flex',
             flexDirection: 'column',
-            zIndex: 1000,
-            overflow: 'hidden'
+            zIndex: 999,
+            boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1)',
+            overflow: 'hidden',
+            background: '#FFFFFF'
           }}
         >
-          <div style={{ background: '#2563EB', color: '#FFFFFF', padding: '14px 18px', display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <Bot size={20} />
-            <div>
-              <div style={{ fontWeight: 700, fontSize: '0.95rem' }}>Groq AI Assistant</div>
-              <div style={{ fontSize: '0.72rem', opacity: 0.85 }}>Live LLM Engine • 24/7 Career Assistance</div>
+          <div style={{ padding: '16px', background: '#1E293B', color: '#FFFFFF', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <Sparkles size={18} color="#60A5FA" />
+              <strong style={{ fontSize: '0.95rem' }}>InternMatch AI Assistant</strong>
             </div>
+            <button onClick={() => setIsOpen(false)} style={{ background: 'none', border: 'none', color: '#94A3B8', cursor: 'pointer' }}>
+              <X size={18} />
+            </button>
           </div>
 
-          <div style={{ flex: 1, padding: '16px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '10px', background: '#F8FAFC' }}>
+          <div style={{ flex: 1, padding: '16px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '12px' }}>
             {messages.map((m, idx) => (
               <div
                 key={idx}
                 style={{
                   alignSelf: m.sender === 'user' ? 'flex-end' : 'flex-start',
-                  maxWidth: '82%',
+                  maxWidth: '85%',
                   padding: '10px 14px',
-                  borderRadius: '10px',
-                  fontSize: '0.85rem',
-                  background: m.sender === 'user' ? '#2563EB' : '#FFFFFF',
-                  color: m.sender === 'user' ? '#FFFFFF' : '#0F172A',
-                  boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
-                  border: m.sender === 'user' ? 'none' : '1px solid #E2E8F0'
+                  borderRadius: '12px',
+                  fontSize: '0.82rem',
+                  background: m.sender === 'user' ? '#2563EB' : '#F1F5F9',
+                  color: m.sender === 'user' ? '#FFFFFF' : '#1E293B'
                 }}
               >
                 {m.text}
               </div>
             ))}
-            {loading && (
-              <div style={{ fontSize: '0.8rem', color: '#64748B', fontStyle: 'italic' }}>Groq AI is thinking...</div>
-            )}
+            {loading && <div style={{ fontSize: '0.78rem', color: '#94A3B8' }}>AI is thinking...</div>}
           </div>
 
-          <form onSubmit={handleSend} style={{ padding: '10px', background: '#FFFFFF', borderTop: '1px solid #E2E8F0', display: 'flex', gap: '8px' }}>
+          <form onSubmit={handleSend} style={{ padding: '12px', borderTop: '1px solid #E2E8F0', display: 'flex', gap: '8px' }}>
             <input
               type="text"
-              className="input-field"
-              placeholder="Ask Groq AI a question..."
+              placeholder="Ask AI anything..."
               value={input}
               onChange={(e) => setInput(e.target.value)}
-              style={{ flex: 1, height: '38px', fontSize: '0.85rem' }}
+              className="input-field"
+              style={{ padding: '8px 12px', fontSize: '0.85rem' }}
             />
-            <button type="submit" disabled={loading} className="btn-primary" style={{ padding: '0 12px', height: '38px' }}>
+            <button type="submit" className="btn-primary" style={{ padding: '8px 14px' }}>
               <Send size={16} />
             </button>
           </form>

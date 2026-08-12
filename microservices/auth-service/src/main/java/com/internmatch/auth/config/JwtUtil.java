@@ -18,12 +18,20 @@ public class JwtUtil {
     private String secret;
 
     private SecretKey getSigningKey() {
-        return Keys.hmacShaKeyFor(secret.getBytes(StandardCharsets.UTF_8));
+        byte[] keyBytes = secret.getBytes(StandardCharsets.UTF_8);
+        if (keyBytes.length < 32) {
+            byte[] padded = new byte[32];
+            System.arraycopy(keyBytes, 0, padded, 0, Math.min(keyBytes.length, 32));
+            return Keys.hmacShaKeyFor(padded);
+        }
+        return Keys.hmacShaKeyFor(keyBytes);
     }
 
-    public String generateToken(String username, String role) {
+    public String generateToken(int userId, String username, String role) {
         return Jwts.builder()
                 .setSubject(username)
+                .claim("userId", userId)
+                .claim("user_id", userId)
                 .claim("role", role)
                 .setIssuedAt(new Date())
                 .setExpiration(new Date(System.currentTimeMillis() + 86400000L)) // 24 hours
@@ -32,10 +40,45 @@ public class JwtUtil {
     }
 
     public Claims extractClaims(String token) {
-        return Jwts.parserBuilder()
-                .setSigningKey(getSigningKey())
-                .build()
-                .parseClaimsJws(token.replace("Bearer ", ""))
-                .getBody();
+        if (token == null) return null;
+        String cleanToken = token.trim();
+        if (cleanToken.startsWith("Bearer ")) {
+            cleanToken = cleanToken.substring(7).trim();
+        }
+        try {
+            return Jwts.parserBuilder()
+                    .setSigningKey(getSigningKey())
+                    .build()
+                    .parseClaimsJws(cleanToken)
+                    .getBody();
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    public boolean validateToken(String token) {
+        Claims claims = extractClaims(token);
+        return claims != null && claims.getExpiration() != null && claims.getExpiration().after(new Date());
+    }
+
+    public Integer extractUserId(String token) {
+        Claims claims = extractClaims(token);
+        if (claims == null) return null;
+        Object userIdObj = claims.get("userId");
+        if (userIdObj == null) userIdObj = claims.get("user_id");
+        if (userIdObj instanceof Number) {
+            return ((Number) userIdObj).intValue();
+        }
+        return null;
+    }
+
+    public String extractRole(String token) {
+        Claims claims = extractClaims(token);
+        return claims != null ? (String) claims.get("role") : null;
+    }
+
+    public String extractUsername(String token) {
+        Claims claims = extractClaims(token);
+        return claims != null ? claims.getSubject() : null;
     }
 }

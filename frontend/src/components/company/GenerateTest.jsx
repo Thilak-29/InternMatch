@@ -75,7 +75,7 @@ export default function GenerateTest({ apiBaseUrl, currentUser }) {
                 </option>
               ))
             ) : (
-              <option value="1">Full-Stack Software Engineering Intern (Google)</option>
+              <option value="" disabled>No internships found</option>
             )}
           </select>
         </div>
