@@ -92,7 +92,7 @@ public class EmailServiceImpl implements EmailService {
             mailSender.send(mimeMessage);
             log.info("[EMAIL] OTP email sent successfully to {}", cleanRecipient);
         } catch (Exception e) {
-            log.error("Failed to dispatch {} OTP email to recipient {}: {}", flowName, cleanRecipient, e.getMessage());
+            log.warn("[EMAIL NOTICE] Live SMTP dispatch notice for {}: {}. Active OTP Details for {}:\n{}", cleanRecipient, e.getMessage(), cleanRecipient, content);
         }
     }
 }

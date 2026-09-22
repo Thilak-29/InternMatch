@@ -203,24 +203,24 @@ export default function LandingPage({ onLoginSuccess, apiBaseUrl = API_CONFIG.AU
           if ((res.ok && data && data.success) || (data && data.verification_required)) {
             setForgotEmail(data?.email || email.trim());
             setAuthMode('verify_registration_otp');
-            setInfoMsg(`Registration recorded! 6-digit OTP code sent to ${data?.email || email.trim()}. (Check email inbox or enter 123456)`);
+            setInfoMsg(`Registration recorded! A 6-digit OTP verification code has been sent to ${data?.email || email.trim()}.`);
             setResendTimer(30);
           } else if (data?.detail && data.detail.toLowerCase().includes('already registered')) {
             setForgotEmail(email.trim());
             setAuthMode('verify_registration_otp');
-            setInfoMsg(data.detail + ' Enter OTP sent to your email or check inbox.');
+            setInfoMsg(data.detail + ' Enter the verification code sent to your email.');
             setResendTimer(30);
           } else {
             setForgotEmail(email.trim());
             setAuthMode('verify_registration_otp');
-            setInfoMsg(`Verification code sent to ${email.trim()}. (Check email inbox or enter 123456)`);
+            setInfoMsg(`Verification code sent to ${email.trim()}.`);
             setResendTimer(30);
           }
         } catch (err) {
           console.warn('Registration fetch notice, switching to OTP verification:', err);
           setForgotEmail(email.trim());
           setAuthMode('verify_registration_otp');
-          setInfoMsg(`Verification code sent to ${email.trim()}. (Check email inbox or enter 123456)`);
+          setInfoMsg(`Verification code sent to ${email.trim()}.`);
           setResendTimer(30);
         } finally {
           setIsLoading(false);
@@ -264,19 +264,19 @@ export default function LandingPage({ onLoginSuccess, apiBaseUrl = API_CONFIG.AU
           if ((res.ok && data && data.success) || (data && data.verification_required)) {
             setForgotEmail(data?.email || companyEmail.trim());
             setAuthMode('verify_registration_otp');
-            setInfoMsg(`Recruiter registration recorded! Verification code dispatched to ${data?.email || companyEmail.trim()}. (Check email inbox or enter 123456)`);
+            setInfoMsg(`Recruiter registration recorded! Verification code sent to ${data?.email || companyEmail.trim()}.`);
             setResendTimer(30);
           } else {
             setForgotEmail(companyEmail.trim());
             setAuthMode('verify_registration_otp');
-            setInfoMsg(`Verification code sent to ${companyEmail.trim()}. (Check email inbox or enter 123456)`);
+            setInfoMsg(`Verification code sent to ${companyEmail.trim()}.`);
             setResendTimer(30);
           }
         } catch (err) {
           console.warn('Recruiter registration fetch notice:', err);
           setForgotEmail(companyEmail.trim());
           setAuthMode('verify_registration_otp');
-          setInfoMsg(`Verification code sent to ${companyEmail.trim()}. (Check email inbox or enter 123456)`);
+          setInfoMsg(`Verification code sent to ${companyEmail.trim()}.`);
           setResendTimer(30);
         } finally {
           setIsLoading(false);
