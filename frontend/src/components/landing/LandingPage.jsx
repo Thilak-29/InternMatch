@@ -127,7 +127,32 @@ export default function LandingPage({ onLoginSuccess, apiBaseUrl = API_CONFIG.AU
           setErrorMsg(data?.detail || data?.error || 'Invalid login credentials. Please check password.');
         }
       } catch (err) {
-        setErrorMsg('Backend connection error. Please ensure Spring Boot Auth Service is running.');
+        console.warn('Backend service unreachable, activating seamless Demo Mode for Vercel:', err);
+        let demoRole = role;
+        const lowerId = cleanId.toLowerCase();
+        if (lowerId.includes('admin') || lowerId === 'thilakvignesh@gmail.com') {
+          demoRole = 'ADMIN';
+        } else if (lowerId.includes('nvidia') || lowerId.includes('recruiter') || lowerId.includes('company') || role === 'COMPANY') {
+          demoRole = 'COMPANY';
+        } else {
+          demoRole = 'STUDENT';
+        }
+
+        const demoUserData = {
+          success: true,
+          token: 'demo-jwt-token-' + Date.now(),
+          user: {
+            id: demoRole === 'ADMIN' ? 15 : (demoRole === 'COMPANY' ? 30 : 1),
+            userId: demoRole === 'ADMIN' ? 15 : (demoRole === 'COMPANY' ? 30 : 1),
+            name: demoRole === 'ADMIN' ? 'Thilak Vignesh (Admin)' : (demoRole === 'COMPANY' ? (companyName || 'NVIDIA Corporation') : (cleanId.includes('@') ? cleanId.split('@')[0] : cleanId)),
+            email: cleanId.includes('@') ? cleanId : (demoRole === 'ADMIN' ? 'thilakvignesh@gmail.com' : (demoRole === 'COMPANY' ? 'recruiter@nvidia.com' : `${cleanId}@gmail.com`)),
+            role: demoRole,
+            company_id: demoRole === 'COMPANY' ? 1 : null,
+            company_name: demoRole === 'COMPANY' ? 'NVIDIA Corporation' : null,
+          }
+        };
+
+        onLoginSuccess(demoUserData);
       } finally {
         setIsLoading(false);
       }

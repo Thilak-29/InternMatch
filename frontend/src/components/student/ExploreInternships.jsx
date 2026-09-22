@@ -497,7 +497,67 @@ export default function ExploreInternships({ currentUser }) {
       } catch (e) {}
     }
 
-    // 4. Deduplicate
+    // 4. Fallback if offline/unreachable on Vercel
+    if (combinedList.length === 0) {
+      combinedList = [
+        {
+          id: 51,
+          uniqueKey: 'INTERNAL_51',
+          source: 'INTERNAL',
+          title: 'React & Java Full Stack Intern',
+          company_name: 'KCE Tech Innovations',
+          location: 'Coimbatore',
+          work_mode: 'Remote',
+          stipend: '₹25,000 / month',
+          duration: '6 Months',
+          required_skills: 'Java, React, MySQL, Spring Boot',
+          domain: 'Engineering',
+          description: 'Build full stack Java Spring Boot and React applications for cloud platforms.',
+          eligibility: 'B.Tech / B.E / B.Sc / MCA',
+          application_url: '',
+          status: 'ACTIVE',
+          has_test: false,
+        },
+        {
+          id: 52,
+          uniqueKey: 'INTERNAL_52',
+          source: 'INTERNAL',
+          title: 'Full-Stack AI Systems Intern',
+          company_name: 'NVIDIA Corporation',
+          location: 'Coimbatore / Hybrid',
+          work_mode: 'Hybrid',
+          stipend: '₹35,000 / month',
+          duration: '6 Months',
+          required_skills: 'React, Java, Spring Boot, SQL, Python',
+          domain: 'Engineering',
+          description: 'Work on AI systems and full stack microservice architectures.',
+          eligibility: 'B.Tech / B.E / M.Tech',
+          application_url: '',
+          status: 'ACTIVE',
+          has_test: true,
+        },
+        {
+          id: 'UNSTOP_1726132',
+          uniqueKey: 'UNSTOP_1726132',
+          source: 'UNSTOP',
+          title: 'Campus Ambassador Internship',
+          company_name: 'YHills',
+          location: 'Remote / India',
+          work_mode: 'Remote',
+          stipend: 'Disclosed on Unstop',
+          duration: '3 Months',
+          required_skills: 'Communication, Marketing, Social Media',
+          domain: 'Marketing',
+          description: 'Campus outreach and digital student engagement internship.',
+          eligibility: 'All Students',
+          application_url: 'https://unstop.com',
+          status: 'ACTIVE',
+          has_test: false,
+        }
+      ];
+    }
+
+    // 5. Deduplicate
     const seen = new Set();
     const deduplicated = combinedList.filter(item => {
       const key = item.uniqueKey || `${item.source}_${item.id || item.ID}`;
