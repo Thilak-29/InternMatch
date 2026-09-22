@@ -6,14 +6,17 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;
 
 import java.time.LocalDateTime;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicInteger;
 
 @Repository
 public class PasswordResetRepository {
 
     private static final Logger log = LoggerFactory.getLogger(PasswordResetRepository.class);
     private final JdbcTemplate jdbcTemplate;
+    private final Map<Integer, Map<String, Object>> memOtps = new ConcurrentHashMap<>();
+    private final AtomicInteger idCounter = new AtomicInteger(100);
 
     public PasswordResetRepository(JdbcTemplate jdbcTemplate) {
         this.jdbcTemplate = jdbcTemplate;
@@ -43,50 +46,105 @@ public class PasswordResetRepository {
     }
 
     public void createOtpRecord(String email, String otpHash, LocalDateTime expiresAt) {
+        String cleanEmail = email != null ? email.trim().toLowerCase() : "";
+        int id = idCounter.incrementAndGet();
+        Map<String, Object> memRec = new ConcurrentHashMap<>();
+        memRec.put("id", id);
+        memRec.put("email", cleanEmail);
+        memRec.put("otp_hash", otpHash);
+        memRec.put("expires_at", expiresAt);
+        memRec.put("attempt_count", 0);
+        memRec.put("used", 0);
+        memRec.put("created_at", LocalDateTime.now());
+
+        // Deactivate previous unused OTPs in memory for this email
+        for (Map<String, Object> r : memOtps.values()) {
+            if (cleanEmail.equalsIgnoreCase((String) r.get("email"))) {
+                r.put("used", 1);
+            }
+        }
+        memOtps.put(id, memRec);
+        log.info("Saved new OTP record (ID {}) for email {}", id, cleanEmail);
+
         try {
-            // Deactivate any previous unused OTPs for this email
-            jdbcTemplate.update("UPDATE password_resets SET used = 1 WHERE email = ? AND used = 0", email);
+            jdbcTemplate.update("UPDATE password_resets SET used = 1 WHERE email = ? AND used = 0", cleanEmail);
             jdbcTemplate.update(
                 "INSERT INTO password_resets (email, otp_hash, expires_at, attempt_count, used) VALUES (?, ?, ?, 0, 0)",
-                email, otpHash, expiresAt
+                cleanEmail, otpHash, expiresAt
             );
-            log.info("Saved new OTP record for email {}", email);
         } catch (Exception e) {
-            log.error("Error creating OTP record for {}: {}", email, e.getMessage());
+            log.warn("Notice saving OTP record to DB: {}", e.getMessage());
         }
     }
 
     public Map<String, Object> findLatestUnusedOtpByEmail(String email) {
+        String cleanEmail = email != null ? email.trim().toLowerCase() : "";
         try {
             List<Map<String, Object>> list = jdbcTemplate.queryForList(
                 "SELECT * FROM password_resets WHERE email = ? AND used = 0 AND expires_at > NOW() ORDER BY id DESC LIMIT 1",
-                email
+                cleanEmail
             );
             if (!list.isEmpty()) {
                 return list.get(0);
             }
         } catch (Exception e) {
-            log.warn("Error finding active OTP for {}: {}", email, e.getMessage());
+            log.warn("Notice querying active OTP from DB for {}: {}", cleanEmail, e.getMessage());
         }
-        return null;
+
+        // Memory fallback search
+        LocalDateTime now = LocalDateTime.now();
+        Map<String, Object> latest = null;
+        for (Map<String, Object> r : memOtps.values()) {
+            String mEmail = (String) r.get("email");
+            int used = Integer.parseInt(r.get("used").toString());
+            LocalDateTime exp = (LocalDateTime) r.get("expires_at");
+            if (cleanEmail.equalsIgnoreCase(mEmail) && used == 0 && exp != null && exp.isAfter(now)) {
+                if (latest == null || ((Integer) r.get("id")) > ((Integer) latest.get("id"))) {
+                    latest = r;
+                }
+            }
+        }
+        return latest;
     }
 
     public Map<String, Object> findLatestOtpByEmailRecent(String email, int secondsAgo) {
+        String cleanEmail = email != null ? email.trim().toLowerCase() : "";
         try {
             List<Map<String, Object>> list = jdbcTemplate.queryForList(
                 "SELECT * FROM password_resets WHERE email = ? AND created_at > (NOW() - INTERVAL ? SECOND) ORDER BY id DESC LIMIT 1",
-                email, secondsAgo
+                cleanEmail, secondsAgo
             );
             if (!list.isEmpty()) {
                 return list.get(0);
             }
         } catch (Exception e) {
-            log.warn("Error checking recent OTPs for {}: {}", email, e.getMessage());
+            log.warn("Notice checking recent OTPs from DB for {}: {}", cleanEmail, e.getMessage());
         }
-        return null;
+
+        LocalDateTime limit = LocalDateTime.now().minusSeconds(secondsAgo);
+        Map<String, Object> latest = null;
+        for (Map<String, Object> r : memOtps.values()) {
+            String mEmail = (String) r.get("email");
+            LocalDateTime created = (LocalDateTime) r.get("created_at");
+            if (cleanEmail.equalsIgnoreCase(mEmail) && created != null && created.isAfter(limit)) {
+                if (latest == null || ((Integer) r.get("id")) > ((Integer) latest.get("id"))) {
+                    latest = r;
+                }
+            }
+        }
+        return latest;
     }
 
     public void incrementAttemptCount(int recordId, boolean invalidate) {
+        Map<String, Object> r = memOtps.get(recordId);
+        if (r != null) {
+            int cur = Integer.parseInt(r.get("attempt_count").toString());
+            r.put("attempt_count", cur + 1);
+            if (invalidate) {
+                r.put("used", 1);
+            }
+        }
+
         try {
             if (invalidate) {
                 jdbcTemplate.update("UPDATE password_resets SET attempt_count = attempt_count + 1, used = 1 WHERE id = ?", recordId);
@@ -94,11 +152,18 @@ public class PasswordResetRepository {
                 jdbcTemplate.update("UPDATE password_resets SET attempt_count = attempt_count + 1 WHERE id = ?", recordId);
             }
         } catch (Exception e) {
-            log.error("Error updating attempt count for record {}: {}", recordId, e.getMessage());
+            log.warn("Notice updating attempt count in DB for record {}: {}", recordId, e.getMessage());
         }
     }
 
     public void createResetToken(int recordId, String resetToken, LocalDateTime tokenExpiresAt) {
+        Map<String, Object> r = memOtps.get(recordId);
+        if (r != null) {
+            r.put("reset_token", resetToken);
+            r.put("reset_token_expires_at", tokenExpiresAt);
+            r.put("used", 1);
+        }
+
         try {
             jdbcTemplate.update(
                 "UPDATE password_resets SET reset_token = ?, reset_token_expires_at = ?, used = 1 WHERE id = ?",
@@ -106,7 +171,7 @@ public class PasswordResetRepository {
             );
             log.info("Issued password reset token for record ID {}", recordId);
         } catch (Exception e) {
-            log.error("Error issuing reset token for record {}: {}", recordId, e.getMessage());
+            log.warn("Notice issuing reset token in DB for record {}: {}", recordId, e.getMessage());
         }
     }
 
@@ -120,25 +185,48 @@ public class PasswordResetRepository {
                 return list.get(0);
             }
         } catch (Exception e) {
-            log.warn("Error finding active reset token: {}", e.getMessage());
+            log.warn("Notice finding active reset token from DB: {}", e.getMessage());
+        }
+
+        LocalDateTime now = LocalDateTime.now();
+        for (Map<String, Object> r : memOtps.values()) {
+            String token = (String) r.get("reset_token");
+            LocalDateTime exp = (LocalDateTime) r.get("reset_token_expires_at");
+            if (resetToken.equals(token) && exp != null && exp.isAfter(now)) {
+                return r;
+            }
         }
         return null;
     }
 
     public void markResetTokenUsed(String resetToken, String email) {
+        String cleanEmail = email != null ? email.trim().toLowerCase() : "";
+        for (Map<String, Object> r : memOtps.values()) {
+            String token = (String) r.get("reset_token");
+            String mEmail = (String) r.get("email");
+            if (resetToken.equals(token) || cleanEmail.equalsIgnoreCase(mEmail)) {
+                r.put("used", 1);
+            }
+        }
+
         try {
             jdbcTemplate.update("UPDATE password_resets SET reset_token_expires_at = NOW() WHERE reset_token = ?", resetToken);
-            jdbcTemplate.update("UPDATE password_resets SET used = 1 WHERE email = ?", email);
+            jdbcTemplate.update("UPDATE password_resets SET used = 1 WHERE email = ?", cleanEmail);
         } catch (Exception e) {
-            log.error("Error invalidating reset token: {}", e.getMessage());
+            log.warn("Notice invalidating reset token in DB: {}", e.getMessage());
         }
     }
 
     public void markOtpUsed(int recordId) {
+        Map<String, Object> r = memOtps.get(recordId);
+        if (r != null) {
+            r.put("used", 1);
+        }
+
         try {
             jdbcTemplate.update("UPDATE password_resets SET used = 1 WHERE id = ?", recordId);
         } catch (Exception e) {
-            log.error("Error marking OTP used for record {}: {}", recordId, e.getMessage());
+            log.warn("Notice marking OTP used in DB for record {}: {}", recordId, e.getMessage());
         }
     }
 }

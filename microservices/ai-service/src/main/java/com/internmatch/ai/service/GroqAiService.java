@@ -10,4 +10,7 @@ public interface GroqAiService {
     Map<String, Object> fetchGitHubStats(String username);
     Map<String, Object> generateCareerAdvisorRecommendations(Map<String, Object> request);
     Map<String, Object> parseResume(Map<String, Object> request);
+    Map<String, Object> generateTestQuestions(Map<String, Object> request);
+    Map<String, Object> evaluateTestAnswers(Map<String, Object> request);
+
 }

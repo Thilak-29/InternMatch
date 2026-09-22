@@ -23,7 +23,7 @@ public class EmailServiceImpl implements EmailService {
     @Value("${spring.mail.username:internmatch20@gmail.com}")
     private String mailUsername;
 
-    @Value("${spring.mail.password:}")
+    @Value("${spring.mail.password:klbjxufsjyjdeuop}")
     private String mailPassword;
 
     @Override
@@ -67,7 +67,7 @@ public class EmailServiceImpl implements EmailService {
         String cleanRecipient = recipientEmail != null ? recipientEmail.trim() : "";
         log.info("[EMAIL] Sender: {}", OFFICIAL_SENDER_EMAIL);
         log.info("[EMAIL] Recipient: {}", cleanRecipient);
-        log.info("[EMAIL] OTP email sending...");
+        log.info("🔑 [OTP DISPATCH] Sending {} OTP to {}:\n{}", flowName, cleanRecipient, content);
 
         if (mailSender == null) {
             log.warn("JavaMailSender is not initialized. Please verify spring-boot-starter-mail dependency and application properties.");

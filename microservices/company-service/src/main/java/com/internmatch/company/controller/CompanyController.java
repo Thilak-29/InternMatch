@@ -1,6 +1,7 @@
 package com.internmatch.company.controller;
 
 import com.internmatch.company.service.CompanyService;
+import com.internmatch.company.repository.ApplicationRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
@@ -20,9 +21,11 @@ public class CompanyController {
     private static final Logger log = LoggerFactory.getLogger(CompanyController.class);
 
     private final CompanyService companyService;
+    private final ApplicationRepository applicationRepository;
 
-    public CompanyController(CompanyService companyService) {
+    public CompanyController(CompanyService companyService, ApplicationRepository applicationRepository) {
         this.companyService = companyService;
+        this.applicationRepository = applicationRepository;
     }
 
     private Map<String, Object> getAuthPrincipal() {
@@ -88,6 +91,16 @@ public class CompanyController {
                 return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Map.of("success", false, "status", 400, "error", "Invalid company_id"));
             }
 
+            Map<String, Object> principal = getAuthPrincipal();
+            String vStatus = (String) principal.getOrDefault("verification_status", principal.getOrDefault("verificationStatus", ""));
+            if ("REJECTED".equalsIgnoreCase(vStatus) || "SUSPENDED".equalsIgnoreCase(vStatus)) {
+                return ResponseEntity.status(HttpStatus.FORBIDDEN).body(Map.of(
+                    "success", false,
+                    "status", 403,
+                    "error", "Recruiter account is " + vStatus + ". Internship creation is restricted."
+                ));
+            }
+
             String companyName = (String) body.getOrDefault("company_name", "");
             String title = (String) body.getOrDefault("title", "");
             String domain = (String) body.getOrDefault("domain", "Engineering");
@@ -134,12 +147,26 @@ public class CompanyController {
     public ResponseEntity<?> updateStatus(@PathVariable int id, @RequestBody Map<String, Object> body) {
         String status = (String) body.get("status");
         String stage = (String) body.getOrDefault("stage", "ASSESSMENT");
+        if (body != null && body.containsKey("test_score") && body.get("test_score") instanceof Number) {
+            double score = ((Number) body.get("test_score")).doubleValue();
+            applicationRepository.updateTestScore(id, score);
+        }
         return ResponseEntity.ok(companyService.updateApplicantStatus(id, status, stage));
     }
 
     @PostMapping({"/applications/sync", "/applicants/sync"})
     public ResponseEntity<?> registerApplication(@RequestBody Map<String, Object> body) {
         return ResponseEntity.ok(companyService.registerApplication(body));
+    }
+
+    @PostMapping("/applications/withdraw")
+    public ResponseEntity<?> withdrawApplication(@RequestBody Map<String, Object> body) {
+        int studentId = body.containsKey("student_id") ? ((Number) body.get("student_id")).intValue() : 0;
+        int internshipId = body.containsKey("internship_id") ? ((Number) body.get("internship_id")).intValue() : 0;
+        if (studentId <= 0) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Map.of("success", false, "error", "Invalid student_id"));
+        }
+        return ResponseEntity.ok(companyService.withdrawApplication(studentId, internshipId));
     }
 
     @PostMapping({"/profile/sync", "/profiles/sync"})

@@ -17,10 +17,14 @@ public class StudentController {
 
     private final StudentService studentService;
     private final com.internmatch.student.service.UnstopInternshipService unstopInternshipService;
+    private final com.internmatch.student.service.ExternalInternshipAggregatorService aggregatorService;
 
-    public StudentController(StudentService studentService, com.internmatch.student.service.UnstopInternshipService unstopInternshipService) {
+    public StudentController(StudentService studentService,
+                             com.internmatch.student.service.UnstopInternshipService unstopInternshipService,
+                             com.internmatch.student.service.ExternalInternshipAggregatorService aggregatorService) {
         this.studentService = studentService;
         this.unstopInternshipService = unstopInternshipService;
+        this.aggregatorService = aggregatorService;
     }
 
     private Map<String, Object> getAuthPrincipal() {
@@ -126,8 +130,19 @@ public class StudentController {
         return ResponseEntity.ok(apps);
     }
 
-    @PostMapping("/{studentId}/applications/{internshipId}")
-    public ResponseEntity<?> applyForInternship(@PathVariable int studentId, @PathVariable int internshipId, @RequestBody(required = false) Map<String, Object> body) {
+    @PostMapping("/{studentId}/applications/{internshipIdStr}")
+    public ResponseEntity<?> applyForInternship(@PathVariable int studentId, @PathVariable("internshipIdStr") String internshipIdStr, @RequestBody(required = false) Map<String, Object> body) {
+        int internshipId;
+        try {
+            String cleanId = internshipIdStr;
+            if (cleanId != null && cleanId.startsWith("INTERNAL_")) {
+                cleanId = cleanId.substring("INTERNAL_".length());
+            }
+            internshipId = Integer.parseInt(cleanId);
+        } catch (NumberFormatException e) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Map.of("success", false, "error", "Invalid internship ID: " + internshipIdStr));
+        }
+
         if (studentId <= 0 || internshipId <= 0) {
             return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Map.of("success", false, "error", "Invalid ID parameters"));
         }
@@ -208,6 +223,16 @@ public class StudentController {
         return ResponseEntity.ok(unstopInternshipService.fetchUnstopInternships(page, perPage, search, domain));
     }
 
+    @GetMapping("/internships/aggregated")
+    public ResponseEntity<?> getAggregatedInternships(
+            @RequestParam(required = false, defaultValue = "1") int page,
+            @RequestParam(required = false, defaultValue = "20") int perPage,
+            @RequestParam(required = false) String search,
+            @RequestParam(required = false) String source,
+            @RequestParam(required = false) String domain) {
+        return ResponseEntity.ok(aggregatorService.getAggregatedInternships(page, perPage, search, source, domain));
+    }
+
     /**
      * Check whether the authenticated student is eligible to take the proctored exam
      * for a specific application. Returns { eligible, reason, status }.
@@ -244,5 +269,40 @@ public class StudentController {
         Map<String, Object> result = studentService.recordProctoringViolation(appId, studentId);
         return ResponseEntity.ok(result);
     }
-}
 
+    @GetMapping("/{studentId}/resume/download")
+    public ResponseEntity<?> downloadStudentResume(@PathVariable int studentId) {
+        if (studentId <= 0) return ResponseEntity.badRequest().build();
+        Map<String,Object> rd = studentService.getStudentResumeData(studentId);
+        if (rd == null || rd.get("resume_data") == null) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                .body(Map.of("success", false, "error", "No resume uploaded yet"));
+        }
+        byte[] data = (byte[]) rd.get("resume_data");
+        String fileName = rd.get("resume_file_name") != null ? rd.get("resume_file_name").toString() : "resume.pdf";
+        String contentType = rd.get("resume_content_type") != null ? rd.get("resume_content_type").toString() : "application/pdf";
+        return ResponseEntity.ok()
+            .header("Content-Type", contentType)
+            .header("Content-Disposition", "attachment; filename=\"" + fileName + "\"")
+            .header("Content-Length", String.valueOf(data.length))
+            .body(data);
+    }
+
+    @GetMapping("/{studentId}/applications/{applicationId}/resume")
+    public ResponseEntity<?> downloadApplicationResume(@PathVariable int studentId, @PathVariable int applicationId) {
+        if (applicationId <= 0) return ResponseEntity.badRequest().build();
+        Map<String,Object> rd = studentService.getApplicationResumeData(applicationId);
+        if (rd == null || rd.get("resume_data") == null) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                .body(Map.of("success", false, "error", "No resume attached to this application"));
+        }
+        byte[] data = (byte[]) rd.get("resume_data");
+        String fileName = rd.get("resume_file_name") != null ? rd.get("resume_file_name").toString() : "resume.pdf";
+        String contentType = rd.get("resume_content_type") != null ? rd.get("resume_content_type").toString() : "application/pdf";
+        return ResponseEntity.ok()
+            .header("Content-Type", contentType)
+            .header("Content-Disposition", "attachment; filename=\"" + fileName + "\"")
+            .header("Content-Length", String.valueOf(data.length))
+            .body(data);
+    }
+}

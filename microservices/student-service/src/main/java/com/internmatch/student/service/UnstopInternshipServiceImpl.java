@@ -131,19 +131,34 @@ public class UnstopInternshipServiceImpl implements UnstopInternshipService {
                 String location = "Remote / India";
                 if (node.has("job_detail") && node.get("job_detail").has("locations") && node.get("job_detail").get("locations").isArray() && node.get("job_detail").get("locations").size() > 0) {
                     location = node.get("job_detail").get("locations").get(0).asText();
-                } else if (node.has("location")) {
+                } else if (node.has("location") && !node.get("location").asText().trim().isEmpty()) {
                     location = node.get("location").asText();
-                } else if (node.has("city")) {
+                } else if (node.has("city") && !node.get("city").asText().trim().isEmpty()) {
                     location = node.get("city").asText();
                 }
 
-                String workMode = "Hybrid";
+                String rawType = "";
                 if (node.has("job_detail") && node.get("job_detail").has("work_location_type")) {
-                    workMode = node.get("job_detail").get("work_location_type").asText();
+                    rawType = node.get("job_detail").get("work_location_type").asText();
                 } else if (node.has("work_mode")) {
-                    workMode = node.get("work_mode").asText();
-                } else if (node.has("type")) {
-                    workMode = node.get("type").asText();
+                    rawType = node.get("work_mode").asText();
+                } else if (node.has("mode")) {
+                    rawType = node.get("mode").asText();
+                }
+
+                // AI / Smart Heuristic Mode & Location assignment
+                String workMode = "Hybrid";
+                String locLower = location.toLowerCase();
+                String typeLower = rawType.toLowerCase();
+
+                if (locLower.contains("remote") || locLower.contains("online") || locLower.contains("home") || typeLower.contains("remote") || typeLower.contains("online")) {
+                    workMode = "Remote";
+                } else if (locLower.contains("hybrid") || typeLower.contains("hybrid")) {
+                    workMode = "Hybrid";
+                } else if (locLower.contains("site") || locLower.contains("office") || typeLower.contains("site") || typeLower.contains("office")) {
+                    workMode = "On-Site";
+                } else {
+                    workMode = "Hybrid";
                 }
 
                 String stipend = "Disclosed on Unstop";

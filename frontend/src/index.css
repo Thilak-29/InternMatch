@@ -175,3 +175,23 @@ body {
 ::-webkit-scrollbar-thumb:hover {
   background: #94A3B8;
 }
+
+/* Explore Internships Responsive Layout */
+@media (max-width: 768px) {
+  .explore-horizontal-card {
+    flex-direction: column !important;
+    gap: 16px !important;
+  }
+  .explore-horizontal-card-right {
+    width: 100% !important;
+    align-items: flex-start !important;
+    border-top: 1px solid #F1F5F9;
+    padding-top: 14px;
+    margin-top: 4px;
+  }
+  .explore-horizontal-card-right > div {
+    align-items: flex-start !important;
+    text-align: left !important;
+  }
+}
+

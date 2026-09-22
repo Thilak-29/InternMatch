@@ -7,8 +7,9 @@ export default function GenerateTest({ apiBaseUrl, currentUser }) {
   const [testTitle, setTestTitle] = useState('Proctored Technical & Aptitude Screening Test');
   const [passingScore, setPassingScore] = useState('70');
   const [durationMinutes, setDurationMinutes] = useState('60');
-  const [aptitudeCount, setAptitudeCount] = useState('20');
-  const [codingCount, setCodingCount] = useState('3');
+  const [aptitudeCount, setAptitudeCount] = useState('5');
+  const [verbalCount, setVerbalCount] = useState('3');
+  const [codingCount, setCodingCount] = useState('1');
   const [successMsg, setSuccessMsg] = useState('');
 
   const companyId = currentUser?.userId || currentUser?.user_id || 1;
@@ -42,7 +43,7 @@ export default function GenerateTest({ apiBaseUrl, currentUser }) {
         })
       });
       if (res.ok) {
-        setSuccessMsg('Proctored screening test with 20 Aptitude Questions & 3 Coding Challenges generated successfully!');
+        setSuccessMsg('Proctored screening test configured successfully (5 Aptitude + 3 Verbal MCQs + 1 Coding Challenge)!');
         setTimeout(() => setSuccessMsg(''), 4000);
       }
     } catch (e) {}
@@ -97,10 +98,10 @@ export default function GenerateTest({ apiBaseUrl, currentUser }) {
 
         <div style={{ padding: '16px', background: '#F8FAFC', borderRadius: '8px', border: '1px solid var(--border-light)' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 700, color: 'var(--text-main)', fontSize: '0.9rem' }}>
-            <HelpCircle size={18} color="#2563EB" /> Aptitude Section
+            <HelpCircle size={18} color="#2563EB" /> MCQ Section (Aptitude & Verbal)
           </div>
           <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '4px' }}>
-            Fixed: {aptitudeCount} Multiple Choice Aptitude Questions (Quantitative, Logical, Verbal Reasoning).
+            Structure: {aptitudeCount} Aptitude MCQs + {verbalCount} Verbal Reasoning MCQs.
           </p>
         </div>
 
@@ -109,7 +110,7 @@ export default function GenerateTest({ apiBaseUrl, currentUser }) {
             <Code size={18} color="#7C3AED" /> Coding Section
           </div>
           <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '4px' }}>
-            Fixed: {codingCount} Live Algorithmic & Data Structure Coding Challenges.
+            Structure: {codingCount} Live Technical Coding Challenge (evaluated by Groq AI).
           </p>
         </div>
 

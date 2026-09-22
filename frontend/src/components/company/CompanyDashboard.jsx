@@ -143,6 +143,120 @@ export default function CompanyDashboard({ currentUser, onNavigate }) {
     }
   };
 
+  const verificationStatus = (currentUser?.verification_status || currentUser?.verificationStatus || 'APPROVED').toUpperCase();
+  const rejectionReason = currentUser?.rejection_reason || currentUser?.rejectionReason || '';
+
+  if (verificationStatus === 'PENDING_ADMIN_REVIEW' || verificationStatus === 'PENDING_VERIFICATION') {
+    return (
+      <div style={{ maxWidth: '800px', margin: '30px auto', display: 'flex', flexDirection: 'column', gap: '20px' }}>
+        <div className="glass-card" style={{ padding: '36px', background: '#FFFFFF', borderLeft: '6px solid #D97706', boxShadow: '0 10px 25px -5px rgba(0,0,0,0.05)' }}>
+          <div style={{ display: 'flex', alignItems: 'flex-start', gap: '18px' }}>
+            <div style={{ width: '52px', height: '52px', borderRadius: '14px', background: '#FEF3C7', color: '#D97706', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+              <Clock size={28} />
+            </div>
+            <div>
+              <span style={{ fontSize: '0.75rem', fontWeight: 800, color: '#D97706', letterSpacing: '1px', textTransform: 'uppercase' }}>
+                STATUS: PENDING REVIEW
+              </span>
+              <h2 style={{ fontSize: '1.4rem', fontWeight: 800, color: '#0F172A', marginTop: '4px' }}>
+                Recruiter Verification Pending
+              </h2>
+              <p style={{ fontSize: '0.92rem', color: '#475569', marginTop: '8px', lineHeight: 1.6 }}>
+                Your company and recruiter information has been submitted for verification.
+                You will be able to access the recruiter dashboard after your account is approved by an administrator.
+              </p>
+            </div>
+          </div>
+
+          <div style={{ marginTop: '24px', paddingTop: '20px', borderTop: '1px solid #E2E8F0', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px' }}>
+            <div>
+              <span style={{ fontSize: '0.74rem', color: '#64748B', fontWeight: 700 }}>RECRUITER NAME</span>
+              <div style={{ fontSize: '0.9rem', fontWeight: 800, color: '#0F172A', marginTop: '2px' }}>
+                {currentUser?.recruiter_name || currentUser?.name || 'Recruiter Candidate'}
+              </div>
+            </div>
+
+            <div>
+              <span style={{ fontSize: '0.74rem', color: '#64748B', fontWeight: 700 }}>COMPANY NAME</span>
+              <div style={{ fontSize: '0.9rem', fontWeight: 800, color: '#0F172A', marginTop: '2px' }}>
+                {currentUser?.company_name || currentUser?.username || 'Corporate Partner'}
+              </div>
+            </div>
+
+            <div>
+              <span style={{ fontSize: '0.74rem', color: '#64748B', fontWeight: 700 }}>OFFICIAL EMAIL</span>
+              <div style={{ fontSize: '0.9rem', fontWeight: 800, color: '#0F172A', marginTop: '2px' }}>
+                {currentUser?.email || 'email@company.com'}
+              </div>
+            </div>
+
+            <div>
+              <span style={{ fontSize: '0.74rem', color: '#64748B', fontWeight: 700 }}>EMAIL STATUS</span>
+              <div style={{ fontSize: '0.85rem', fontWeight: 800, color: '#059669', marginTop: '2px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                <CheckCircle2 size={14} /> ✓ Verified Mailbox
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (verificationStatus === 'REJECTED') {
+    return (
+      <div style={{ maxWidth: '800px', margin: '30px auto', display: 'flex', flexDirection: 'column', gap: '20px' }}>
+        <div className="glass-card" style={{ padding: '36px', background: '#FFFFFF', borderLeft: '6px solid #DC2626', boxShadow: '0 10px 25px -5px rgba(0,0,0,0.05)' }}>
+          <div style={{ display: 'flex', alignItems: 'flex-start', gap: '18px' }}>
+            <div style={{ width: '52px', height: '52px', borderRadius: '14px', background: '#FEE2E2', color: '#DC2626', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+              <AlertCircle size={28} />
+            </div>
+            <div>
+              <span style={{ fontSize: '0.75rem', fontWeight: 800, color: '#DC2626', letterSpacing: '1px', textTransform: 'uppercase' }}>
+                STATUS: REJECTED
+              </span>
+              <h2 style={{ fontSize: '1.4rem', fontWeight: 800, color: '#0F172A', marginTop: '4px' }}>
+                Recruiter Verification Rejected
+              </h2>
+              <p style={{ fontSize: '0.92rem', color: '#475569', marginTop: '8px', lineHeight: 1.6 }}>
+                Your recruiter account could not be verified by our administrative team.
+              </p>
+              {rejectionReason && (
+                <div style={{ marginTop: '14px', padding: '12px 16px', background: '#FEF2F2', border: '1px solid #FCA5A5', borderRadius: '8px', color: '#991B1B', fontSize: '0.85rem', fontWeight: 600 }}>
+                  <strong>Reason:</strong> {rejectionReason}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (verificationStatus === 'SUSPENDED') {
+    return (
+      <div style={{ maxWidth: '800px', margin: '30px auto', display: 'flex', flexDirection: 'column', gap: '20px' }}>
+        <div className="glass-card" style={{ padding: '36px', background: '#FFFFFF', borderLeft: '6px solid #DC2626' }}>
+          <div style={{ display: 'flex', alignItems: 'flex-start', gap: '18px' }}>
+            <div style={{ width: '52px', height: '52px', borderRadius: '14px', background: '#FEE2E2', color: '#DC2626', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+              <AlertCircle size={28} />
+            </div>
+            <div>
+              <span style={{ fontSize: '0.75rem', fontWeight: 800, color: '#DC2626', letterSpacing: '1px', textTransform: 'uppercase' }}>
+                STATUS: SUSPENDED
+              </span>
+              <h2 style={{ fontSize: '1.4rem', fontWeight: 800, color: '#0F172A', marginTop: '4px' }}>
+                Recruiter Account Suspended
+              </h2>
+              <p style={{ fontSize: '0.92rem', color: '#475569', marginTop: '8px', lineHeight: 1.6 }}>
+                Your recruiter account has been suspended by an administrator. Recruiter dashboard access and job posting features are disabled.
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   if (isLoading) {
     return (
       <div className="glass-card" style={{ padding: '48px', textAlign: 'center', color: 'var(--text-muted)' }}>
@@ -156,9 +270,14 @@ export default function CompanyDashboard({ currentUser, onNavigate }) {
       {/* Banner */}
       <div className="glass-card" style={{ padding: '28px', background: 'linear-gradient(135deg, #1E293B 0%, #0F172A 100%)', color: '#FFFFFF', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px' }}>
         <div>
-          <h2 style={{ fontSize: '1.5rem', fontWeight: 800 }}>
-            {currentUser?.name || 'Recruiter Portal'}
-          </h2>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+            <h2 style={{ fontSize: '1.5rem', fontWeight: 800 }}>
+              {currentUser?.name || 'Recruiter Portal'}
+            </h2>
+            <span style={{ fontSize: '0.75rem', fontWeight: 800, padding: '3px 10px', borderRadius: '12px', background: '#DCFCE7', color: '#166534', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+              <CheckCircle2 size={13} /> ✓ Verified Recruiter
+            </span>
+          </div>
           <p style={{ fontSize: '0.85rem', color: '#94A3B8', marginTop: '4px' }}>
             Manage active internship listings, evaluate applicants, and generate screening tests.
           </p>

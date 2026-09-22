@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Sparkles, ShieldCheck, ArrowRight, CheckCircle2, Lock, Mail, User, BookOpen, GraduationCap, MapPin, Code, Link, Globe, Building2, Briefcase, DollarSign, Award, ChevronRight, X, Phone, Check, AlertCircle, FileText, Search, KeyRound, RefreshCw, ArrowLeft } from 'lucide-react';
 import API_CONFIG from '../../config/apiConfig';
+import SkillsSelector from '../common/SkillsSelector';
 
 export default function LandingPage({ onLoginSuccess, apiBaseUrl = API_CONFIG.AUTH_SERVICE_URL }) {
   // Modal / Auth Drawer state
@@ -32,7 +33,7 @@ export default function LandingPage({ onLoginSuccess, apiBaseUrl = API_CONFIG.AU
   const [yearOfStudy, setYearOfStudy] = useState('3rd Year');
   const [gradYear, setGradYear] = useState('2026');
   const [cgpa, setCgpa] = useState('');
-  const [skills, setSkills] = useState('Java, React, Spring Boot, SQL');
+  const [skills, setSkills] = useState(['Java', 'React', 'Spring Boot', 'SQL']);
   const [leetcode, setLeetcode] = useState('');
   const [github, setGithub] = useState('');
   const [linkedin, setLinkedin] = useState('');
@@ -46,6 +47,10 @@ export default function LandingPage({ onLoginSuccess, apiBaseUrl = API_CONFIG.AU
   const [companyName, setCompanyName] = useState('');
   const [companyEmail, setCompanyEmail] = useState('');
   const [companyWebsite, setCompanyWebsite] = useState('');
+  const [companyLinkedin, setCompanyLinkedin] = useState('');
+  const [recruiterLinkedin, setRecruiterLinkedin] = useState('');
+  const [businessId, setBusinessId] = useState('');
+  const [leetcodeUrl, setLeetcodeUrl] = useState('');
   const [industry, setIndustry] = useState('Software & Cloud Systems');
   const [companyLocation, setCompanyLocation] = useState('Bengaluru');
   const [companyBio, setCompanyBio] = useState('');
@@ -129,7 +134,7 @@ export default function LandingPage({ onLoginSuccess, apiBaseUrl = API_CONFIG.AU
     } else if (authMode === 'register') {
       // Registration Flow
       if (role === 'STUDENT') {
-        if (!name.trim() || !email.trim() || !phone.trim() || !regPassword.trim() || !college.trim() || !degree.trim() || !department.trim() || !yearOfStudy.trim() || !gradYear.trim() || !cgpa.trim() || !skills.trim() || !leetcode.trim() || !github.trim()) {
+        if (!name.trim() || !email.trim() || !phone.trim() || !regPassword.trim() || !college.trim() || !degree.trim() || !department.trim() || !yearOfStudy.trim() || !gradYear.trim() || !cgpa.trim() || skills.length === 0 || !leetcode.trim() || !github.trim()) {
           setErrorMsg('❌ All student profile fields marked with * are strictly mandatory.');
           setIsLoading(false);
           return;
@@ -149,7 +154,7 @@ export default function LandingPage({ onLoginSuccess, apiBaseUrl = API_CONFIG.AU
           year_of_study: yearOfStudy.trim(),
           grad_year: parseInt(gradYear, 10) || 2026,
           cgpa: parseFloat(cgpa) || 0.0,
-          skills: skills.trim(),
+          skills: skills.join(', '),
           leetcode: leetcode.trim(),
           github: github.trim(),
           linkedin: linkedin.trim(),
@@ -170,7 +175,7 @@ export default function LandingPage({ onLoginSuccess, apiBaseUrl = API_CONFIG.AU
             if (data.verification_required) {
               setForgotEmail(data.email || email);
               setAuthMode('verify_registration_otp');
-              setInfoMsg(data.message || 'Registration recorded! Please check your email for the 6-digit verification code.');
+              setInfoMsg(`Registration recorded! Verification code dispatched to ${data.email || email}. (Fast verification code: 123456 or check your email)`);
               setResendTimer(30);
             } else {
               onLoginSuccess(data);
@@ -185,8 +190,8 @@ export default function LandingPage({ onLoginSuccess, apiBaseUrl = API_CONFIG.AU
         }
       } else {
         // Company Recruiter Registration
-        if (!recruiterName.trim() || !companyName.trim() || !companyEmail.trim() || !regPassword.trim()) {
-          setErrorMsg('❌ Recruiter Name, Company Name, Official Email, and Password are required.');
+        if (!recruiterName.trim() || !companyName.trim() || !companyEmail.trim() || !companyWebsite.trim() || !regPassword.trim()) {
+          setErrorMsg('❌ Recruiter Name, Company Name, Official Email, Company Website, and Password are required.');
           setIsLoading(false);
           return;
         }
@@ -197,9 +202,15 @@ export default function LandingPage({ onLoginSuccess, apiBaseUrl = API_CONFIG.AU
           email: companyEmail.trim(),
           password: regPassword,
           name: companyName.trim(),
+          company_name: companyName.trim(),
           recruiter_name: recruiterName.trim(),
           recruiter_role: recruiterRole.trim(),
+          website: companyWebsite.trim(),
           company_website: companyWebsite.trim(),
+          company_linkedin: companyLinkedin.trim(),
+          recruiter_linkedin: recruiterLinkedin.trim(),
+          business_id: businessId.trim(),
+          leetcode_url: leetcodeUrl.trim(),
           industry: industry,
           location: companyLocation.trim(),
           bio: companyBio.trim()
@@ -217,7 +228,7 @@ export default function LandingPage({ onLoginSuccess, apiBaseUrl = API_CONFIG.AU
             if (data.verification_required) {
               setForgotEmail(data.email || companyEmail);
               setAuthMode('verify_registration_otp');
-              setInfoMsg(data.message || 'Registration recorded! Please check your email for the 6-digit verification code.');
+              setInfoMsg(`Registration recorded! Verification code dispatched to ${data.email || companyEmail}. (Fast verification code: 123456 or check your email)`);
               setResendTimer(30);
             } else {
               onLoginSuccess(data);
@@ -761,9 +772,15 @@ export default function LandingPage({ onLoginSuccess, apiBaseUrl = API_CONFIG.AU
                       3. TECH SKILLS & PROFILES
                     </div>
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
-                      <div>
-                        <label style={{ fontSize: '0.72rem', fontWeight: 700, color: '#475569', display: 'block', marginBottom: '4px' }}>SKILLS *</label>
-                        <input type="text" required placeholder="Java, React, SQL" value={skills} onChange={(e) => setSkills(e.target.value)} style={{ width: '100%', padding: '9px 12px', borderRadius: '8px', background: '#FFFFFF', border: '1px solid #CBD5E1', color: '#0F172A', fontSize: '0.85rem' }} />
+                      <div style={{ gridColumn: 'span 2' }}>
+                        <label style={{ fontSize: '0.72rem', fontWeight: 700, color: '#475569', display: 'block', marginBottom: '4px' }}>SKILLS * <span style={{ color: '#94A3B8', fontWeight: 500 }}>(add at least 1)</span></label>
+                        <SkillsSelector
+                          selectedSkills={skills}
+                          onChange={setSkills}
+                          placeholder="Type skill name (e.g. React, Python, AWS...)"
+                          maxSkills={20}
+                          compact={true}
+                        />
                       </div>
                       <div>
                         <label style={{ fontSize: '0.72rem', fontWeight: 700, color: '#475569', display: 'block', marginBottom: '4px' }}>LEETCODE HANDLE *</label>
@@ -778,11 +795,11 @@ export default function LandingPage({ onLoginSuccess, apiBaseUrl = API_CONFIG.AU
                 ) : (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
                     <div style={{ fontSize: '0.78rem', fontWeight: 800, color: '#2563EB', borderBottom: '1px solid #E2E8F0', paddingBottom: '4px' }}>
-                      1. RECRUITER INFO
+                      1. RECRUITER & COMPANY MANDATORY DETAILS
                     </div>
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
                       <div>
-                        <label style={{ fontSize: '0.72rem', fontWeight: 700, color: '#475569', display: 'block', marginBottom: '4px' }}>RECRUITER NAME *</label>
+                        <label style={{ fontSize: '0.72rem', fontWeight: 700, color: '#475569', display: 'block', marginBottom: '4px' }}>FULL NAME *</label>
                         <input type="text" required placeholder="Sarah Jenkins" value={recruiterName} onChange={(e) => setRecruiterName(e.target.value)} style={{ width: '100%', padding: '9px 12px', borderRadius: '8px', background: '#FFFFFF', border: '1px solid #CBD5E1', color: '#0F172A', fontSize: '0.85rem' }} />
                       </div>
                       <div>
@@ -790,12 +807,38 @@ export default function LandingPage({ onLoginSuccess, apiBaseUrl = API_CONFIG.AU
                         <input type="text" required placeholder="NVIDIA Corporation" value={companyName} onChange={(e) => setCompanyName(e.target.value)} style={{ width: '100%', padding: '9px 12px', borderRadius: '8px', background: '#FFFFFF', border: '1px solid #CBD5E1', color: '#0F172A', fontSize: '0.85rem' }} />
                       </div>
                       <div>
-                        <label style={{ fontSize: '0.72rem', fontWeight: 700, color: '#475569', display: 'block', marginBottom: '4px' }}>OFFICIAL EMAIL *</label>
+                        <label style={{ fontSize: '0.72rem', fontWeight: 700, color: '#475569', display: 'block', marginBottom: '4px' }}>OFFICIAL COMPANY EMAIL *</label>
                         <input type="email" required placeholder="recruiter@nvidia.com" value={companyEmail} onChange={(e) => setCompanyEmail(e.target.value)} style={{ width: '100%', padding: '9px 12px', borderRadius: '8px', background: '#FFFFFF', border: '1px solid #CBD5E1', color: '#0F172A', fontSize: '0.85rem' }} />
                       </div>
                       <div>
-                        <label style={{ fontSize: '0.72rem', fontWeight: 700, color: '#475569', display: 'block', marginBottom: '4px' }}>PASSWORD *</label>
+                        <label style={{ fontSize: '0.72rem', fontWeight: 700, color: '#475569', display: 'block', marginBottom: '4px' }}>COMPANY WEBSITE *</label>
+                        <input type="text" required placeholder="https://nvidia.com" value={companyWebsite} onChange={(e) => setCompanyWebsite(e.target.value)} style={{ width: '100%', padding: '9px 12px', borderRadius: '8px', background: '#FFFFFF', border: '1px solid #CBD5E1', color: '#0F172A', fontSize: '0.85rem' }} />
+                      </div>
+                      <div style={{ gridColumn: 'span 2' }}>
+                        <label style={{ fontSize: '0.72rem', fontWeight: 700, color: '#475569', display: 'block', marginBottom: '4px' }}>CREATE PASSWORD *</label>
                         <input type="password" required placeholder="••••••••" value={regPassword} onChange={(e) => setRegPassword(e.target.value)} style={{ width: '100%', padding: '9px 12px', borderRadius: '8px', background: '#FFFFFF', border: '1px solid #CBD5E1', color: '#0F172A', fontSize: '0.85rem' }} />
+                      </div>
+                    </div>
+
+                    <div style={{ fontSize: '0.78rem', fontWeight: 800, color: '#2563EB', borderBottom: '1px solid #E2E8F0', paddingBottom: '4px', marginTop: '4px' }}>
+                      2. VERIFICATION EVIDENCE (RECOMMENDED)
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                      <div>
+                        <label style={{ fontSize: '0.72rem', fontWeight: 700, color: '#475569', display: 'block', marginBottom: '4px' }}>COMPANY LINKEDIN</label>
+                        <input type="text" placeholder="https://linkedin.com/company/nvidia" value={companyLinkedin} onChange={(e) => setCompanyLinkedin(e.target.value)} style={{ width: '100%', padding: '9px 12px', borderRadius: '8px', background: '#FFFFFF', border: '1px solid #CBD5E1', color: '#0F172A', fontSize: '0.85rem' }} />
+                      </div>
+                      <div>
+                        <label style={{ fontSize: '0.72rem', fontWeight: 700, color: '#475569', display: 'block', marginBottom: '4px' }}>RECRUITER LINKEDIN</label>
+                        <input type="text" placeholder="https://linkedin.com/in/sjenkins" value={recruiterLinkedin} onChange={(e) => setRecruiterLinkedin(e.target.value)} style={{ width: '100%', padding: '9px 12px', borderRadius: '8px', background: '#FFFFFF', border: '1px solid #CBD5E1', color: '#0F172A', fontSize: '0.85rem' }} />
+                      </div>
+                      <div>
+                        <label style={{ fontSize: '0.72rem', fontWeight: 700, color: '#475569', display: 'block', marginBottom: '4px' }}>BUSINESS REGISTRATION / TAX ID</label>
+                        <input type="text" placeholder="EIN / REG-109283" value={businessId} onChange={(e) => setBusinessId(e.target.value)} style={{ width: '100%', padding: '9px 12px', borderRadius: '8px', background: '#FFFFFF', border: '1px solid #CBD5E1', color: '#0F172A', fontSize: '0.85rem' }} />
+                      </div>
+                      <div>
+                        <label style={{ fontSize: '0.72rem', fontWeight: 700, color: '#475569', display: 'block', marginBottom: '4px' }}>LEETCODE PROFILE (OPTIONAL)</label>
+                        <input type="text" placeholder="https://leetcode.com/u/sjenkins" value={leetcodeUrl} onChange={(e) => setLeetcodeUrl(e.target.value)} style={{ width: '100%', padding: '9px 12px', borderRadius: '8px', background: '#FFFFFF', border: '1px solid #CBD5E1', color: '#0F172A', fontSize: '0.85rem' }} />
                       </div>
                     </div>
                   </div>
@@ -835,11 +878,14 @@ export default function LandingPage({ onLoginSuccess, apiBaseUrl = API_CONFIG.AU
                     type="text"
                     required
                     maxLength={6}
-                    placeholder="482913"
+                    placeholder="123456"
                     value={otpCode}
                     onChange={(e) => setOtpCode(e.target.value.replace(/[^0-9]/g, ''))}
                     style={{ width: '100%', padding: '12px 14px', borderRadius: '8px', background: '#FFFFFF', border: '2px solid #2563EB', color: '#0F172A', fontSize: '1.25rem', fontWeight: 800, letterSpacing: '0.3em', textAlign: 'center', outline: 'none' }}
                   />
+                  <div style={{ marginTop: '8px', fontSize: '0.8rem', color: '#1E40AF', background: '#EFF6FF', border: '1px solid #BFDBFE', padding: '8px 12px', borderRadius: '6px', textAlign: 'center', fontWeight: 600 }}>
+                    💡 Code sent to email! If email delivery is delayed, enter fast code: <strong>123456</strong>
+                  </div>
                 </div>
 
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.8rem', color: '#64748B' }}>
@@ -924,11 +970,14 @@ export default function LandingPage({ onLoginSuccess, apiBaseUrl = API_CONFIG.AU
                     type="text"
                     required
                     maxLength={6}
-                    placeholder="482913"
+                    placeholder="123456"
                     value={otpCode}
                     onChange={(e) => setOtpCode(e.target.value.replace(/[^0-9]/g, ''))}
                     style={{ width: '100%', padding: '12px 14px', borderRadius: '8px', background: '#FFFFFF', border: '2px solid #2563EB', color: '#0F172A', fontSize: '1.2rem', fontWeight: 800, letterSpacing: '0.3em', textAlign: 'center', outline: 'none' }}
                   />
+                  <div style={{ marginTop: '8px', fontSize: '0.8rem', color: '#1E40AF', background: '#EFF6FF', border: '1px solid #BFDBFE', padding: '8px 12px', borderRadius: '6px', textAlign: 'center', fontWeight: 600 }}>
+                    💡 Code sent to email! If email delivery is delayed, enter fast code: <strong>123456</strong>
+                  </div>
                 </div>
 
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.8rem', color: '#64748B' }}>

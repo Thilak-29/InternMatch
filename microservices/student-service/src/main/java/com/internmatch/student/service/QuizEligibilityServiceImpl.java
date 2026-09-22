@@ -3,6 +3,7 @@ package com.internmatch.student.service;
 import com.internmatch.student.repository.ApplicationRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 
 import java.util.Collections;
@@ -28,9 +29,11 @@ public class QuizEligibilityServiceImpl implements QuizEligibilityService {
     private static final Logger log = LoggerFactory.getLogger(QuizEligibilityServiceImpl.class);
 
     private final ApplicationRepository applicationRepository;
+    private final JdbcTemplate jdbcTemplate;
 
-    public QuizEligibilityServiceImpl(ApplicationRepository applicationRepository) {
+    public QuizEligibilityServiceImpl(ApplicationRepository applicationRepository, JdbcTemplate jdbcTemplate) {
         this.applicationRepository = applicationRepository;
+        this.jdbcTemplate = jdbcTemplate;
     }
 
     @Override
@@ -39,14 +42,37 @@ public class QuizEligibilityServiceImpl implements QuizEligibilityService {
             return buildResult(false, "Invalid application or student ID.", "UNKNOWN");
         }
 
-        // Fetch the application row for this student
-        List<Map<String, Object>> apps = applicationRepository.findByStudentId(studentId);
         Map<String, Object> targetApp = null;
-        for (Map<String, Object> app : apps) {
-            Object idObj = app.get("id") != null ? app.get("id") : app.get("ID");
-            if (idObj instanceof Number && ((Number) idObj).intValue() == appId) {
-                targetApp = app;
-                break;
+
+        // 1. Direct DB lookup by ID
+        try {
+            List<Map<String, Object>> rows = jdbcTemplate.queryForList(
+                    "SELECT * FROM applications WHERE id = ? AND student_id = ?", appId, studentId
+            );
+            if (!rows.isEmpty()) {
+                targetApp = rows.get(0);
+            } else {
+                // 2. Fallback: match by student_id and internship_id of the requested appId or any shortlisted app for that student
+                List<Map<String, Object>> fallback = jdbcTemplate.queryForList(
+                        "SELECT * FROM applications WHERE student_id = ? AND (internship_id = (SELECT internship_id FROM applications WHERE id = ?) OR id = ?) ORDER BY CASE WHEN UPPER(status) IN ('SHORTLISTED', 'ACCEPTED_FOR_TEST') THEN 1 ELSE 2 END, id DESC LIMIT 1",
+                        studentId, appId, appId
+                );
+                if (!fallback.isEmpty()) {
+                    targetApp = fallback.get(0);
+                }
+            }
+        } catch (Exception e) {
+            log.warn("Database lookup in checkEligibility notice ({}), querying repository...", e.getMessage());
+        }
+
+        if (targetApp == null) {
+            List<Map<String, Object>> apps = applicationRepository.findByStudentId(studentId);
+            for (Map<String, Object> app : apps) {
+                Object idObj = app.get("id") != null ? app.get("id") : app.get("ID");
+                if (idObj instanceof Number && ((Number) idObj).intValue() == appId) {
+                    targetApp = app;
+                    break;
+                }
             }
         }
 
@@ -103,17 +129,17 @@ public class QuizEligibilityServiceImpl implements QuizEligibilityService {
         }
 
         // ── Eligible statuses ─────────────────────────────────────────────────
-        if ("SHORTLISTED".equalsIgnoreCase(status)
+        if ("APPLIED".equalsIgnoreCase(status)
+                || "SHORTLISTED".equalsIgnoreCase(status)
                 || "ACCEPTED_FOR_TEST".equalsIgnoreCase(status)) {
             return buildResult(true,
-                    "You are shortlisted and eligible to take the proctored exam.",
+                    "You are eligible to take the AI proctored screening test.",
                     status);
         }
 
-        // ── Any other status (APPLIED, IN_REVIEW, etc.) ───────────────────────
+        // ── Any other status (IN_REVIEW, etc.) ───────────────────────
         return buildResult(false,
-                "You are not yet shortlisted for this internship. "
-                + "The quiz button will be activated once the recruiter shortlists you.",
+                "You are not eligible to take this exam at this time.",
                 status);
     }
 

@@ -25,7 +25,8 @@ public class ApplicationRepository {
 
     private void loadApplicationsFromDatabase() {
         try {
-            List<Map<String, Object>> aRows = jdbcTemplate.queryForList("SELECT * FROM applications");
+            List<Map<String, Object>> aRows = jdbcTemplate.queryForList(
+                    "SELECT id, student_id, internship_id, company_id, student_name, candidate_name, company_name, role_title, title, location, stipend, work_mode, duration, status, source, external_id, application_url, resume_file_name, resume_content_type FROM applications");
             for (Map<String, Object> row : aRows) {
                 Map<String, Object> norm = normalizeMap(row);
                 Object idObj = norm.get("id") != null ? norm.get("id") : norm.get("ID");
@@ -76,11 +77,16 @@ public class ApplicationRepository {
 
                 try {
                     List<Map<String, Object>> existing = jdbcTemplate.queryForList(
-                            "SELECT id FROM applications WHERE (student_id = ? AND internship_id = ?) OR id = ?",
+                            "SELECT id, status FROM applications WHERE (student_id = ? AND internship_id = ?) OR id = ?",
                             studentIdVal, internshipIdVal, appId
                     );
                     if (!existing.isEmpty()) {
                         log.info("Application for student {} and internship {} already present in DB. Skipping duplicate sync insert.", studentIdVal, internshipIdVal);
+                        Object dbSt = existing.get(0).get("status") != null ? existing.get(0).get("status") : existing.get(0).get("STATUS");
+                        if (dbSt != null && !dbSt.toString().trim().isEmpty()) {
+                            norm.put("status", dbSt.toString().trim());
+                            norm.put("STATUS", dbSt.toString().trim());
+                        }
                         SHARED_MEM_APPLICATIONS.put(appId, norm);
                         return;
                     }
@@ -148,6 +154,29 @@ public class ApplicationRepository {
         }).start();
     }
 
+    public String getApplicationStatus(int applicationId) {
+        if (applicationId <= 0) return null;
+        if (SHARED_MEM_APPLICATIONS.containsKey(applicationId)) {
+            Map<String, Object> app = SHARED_MEM_APPLICATIONS.get(applicationId);
+            Object st = app.get("status") != null ? app.get("status") : app.get("STATUS");
+            if (st != null && !st.toString().trim().isEmpty()) {
+                return st.toString().trim();
+            }
+        }
+        try {
+            List<Map<String, Object>> rows = jdbcTemplate.queryForList("SELECT status FROM applications WHERE id = ?", applicationId);
+            if (!rows.isEmpty()) {
+                Object st = rows.get(0).get("status") != null ? rows.get(0).get("status") : rows.get(0).get("STATUS");
+                if (st != null && !st.toString().trim().isEmpty()) {
+                    return st.toString().trim();
+                }
+            }
+        } catch (Exception e) {
+            log.warn("Could not query application status for id={}: {}", applicationId, e.getMessage());
+        }
+        return null;
+    }
+
     public boolean updateStatus(int applicationId, String status) {
         if (applicationId <= 0) return false;
         try {
@@ -188,16 +217,58 @@ public class ApplicationRepository {
         return true;
     }
 
+    public void updateTestScore(int applicationId, double score) {
+        if (applicationId <= 0) return;
+        String status = score >= 60.0 ? "TEST_PASSED" : "TEST_FAILED";
+        try {
+            jdbcTemplate.update("UPDATE applications SET test_score = ?, status = ? WHERE id = ?", score, status, applicationId);
+            log.info("Company DB status & test_score updated for application {}: score={}, status={}", applicationId, score, status);
+        } catch (Exception e) {
+            log.warn("Company DB test_score update notice for application {}: {}", applicationId, e.getMessage());
+        }
+        if (SHARED_MEM_APPLICATIONS.containsKey(applicationId)) {
+            Map<String, Object> app = SHARED_MEM_APPLICATIONS.get(applicationId);
+            app.put("test_score", score);
+            app.put("TEST_SCORE", score);
+            app.put("status", status);
+            app.put("STATUS", status);
+        }
+        for (Map<String, Object> app : SHARED_MEM_APPLICATIONS.values()) {
+            Object idObj = app.get("id") != null ? app.get("id") : app.get("ID");
+            if (idObj instanceof Number && ((Number) idObj).intValue() == applicationId) {
+                app.put("test_score", score);
+                app.put("TEST_SCORE", score);
+                app.put("status", status);
+                app.put("STATUS", status);
+            }
+        }
+    }
+
     public List<Map<String, Object>> findByCompanyId(int companyId) {
         List<Map<String, Object>> result = new ArrayList<>();
         Set<Integer> seenAppIds = new HashSet<>();
 
+        int resolvedCompanyId = companyId;
+        try {
+            List<Map<String, Object>> rows = jdbcTemplate.queryForList("SELECT id FROM companies WHERE user_id = ? OR id = ?", companyId, companyId);
+            if (!rows.isEmpty()) {
+                Object idObj = rows.get(0).get("id") != null ? rows.get(0).get("id") : rows.get(0).get("ID");
+                if (idObj instanceof Number) {
+                    resolvedCompanyId = ((Number) idObj).intValue();
+                }
+            }
+        } catch (Exception ignored) {}
+
         try {
             List<Map<String, Object>> rawApps = Collections.emptyList();
             try {
-                rawApps = jdbcTemplate.queryForList("SELECT a.*, i.title as role_title, i.company_name, i.company_id FROM applications a LEFT JOIN internships i ON a.internship_id = i.id ORDER BY a.id DESC");
+                rawApps = jdbcTemplate.queryForList(
+                        "SELECT a.id, a.student_id, a.internship_id, a.company_id, a.student_name, a.candidate_name, a.company_name, a.role_title, a.title, a.location, a.stipend, a.work_mode, a.duration, a.status, a.source, a.external_id, a.application_url, a.resume_file_name, a.resume_content_type, a.match_score, a.test_score, i.title as role_title_join, i.company_name as company_name_join, i.company_id as company_id_join FROM applications a LEFT JOIN internships i ON a.internship_id = i.id WHERE (a.company_id = ? OR a.company_id = ? OR i.company_id = ? OR i.company_id = ?) AND (a.status IS NULL OR a.status NOT IN ('WITHDRAWN','CANCELLED','DELETED')) ORDER BY a.id DESC",
+                        resolvedCompanyId, companyId, resolvedCompanyId, companyId);
             } catch (Exception ex) {
-                rawApps = jdbcTemplate.queryForList("SELECT * FROM applications ORDER BY id DESC");
+                rawApps = jdbcTemplate.queryForList(
+                        "SELECT id, student_id, internship_id, company_id, student_name, candidate_name, company_name, role_title, title, location, stipend, work_mode, duration, status, source, external_id, application_url, resume_file_name, resume_content_type, match_score, test_score FROM applications WHERE (company_id = ? OR company_id = ?) AND (status IS NULL OR status NOT IN ('WITHDRAWN','CANCELLED','DELETED')) ORDER BY id DESC",
+                        resolvedCompanyId, companyId);
             }
             for (Map<String, Object> app : rawApps) {
                 Map<String, Object> normApp = normalizeMap(app);
@@ -217,7 +288,8 @@ public class ApplicationRepository {
 
                 if (studentId > 0) {
                     try {
-                        List<Map<String, Object>> spRows = jdbcTemplate.queryForList("SELECT * FROM student_profiles WHERE user_id = ?", studentId);
+                        List<Map<String, Object>> spRows = jdbcTemplate.queryForList(
+                                "SELECT user_id, name, college, branch, degree, skills, phone, cgpa, resume_score, resume_file_name, resume_text FROM student_profiles WHERE user_id = ?", studentId);
                         if (!spRows.isEmpty()) {
                             Map<String, Object> spNorm = normalizeMap(spRows.get(0));
                             if (spNorm.get("name") != null && !spNorm.get("name").toString().trim().isEmpty()) {
@@ -246,6 +318,31 @@ public class ApplicationRepository {
                             }
                         }
                     } catch (Exception ignored) {}
+                    if (studentId > 0 && (college == null || college.trim().isEmpty() || degree == null || degree.trim().isEmpty())) {
+                        try {
+                            java.net.URL url = new java.net.URL("http://localhost:8082/api/v1/student/" + studentId + "/profile");
+                            java.net.HttpURLConnection conn = (java.net.HttpURLConnection) url.openConnection();
+                            conn.setRequestMethod("GET");
+                            conn.setConnectTimeout(2000);
+                            conn.setReadTimeout(2000);
+                            if (conn.getResponseCode() == 200) {
+                                java.io.InputStream is = conn.getInputStream();
+                                String jsonText = new String(is.readAllBytes(), "UTF-8");
+                                com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+                                com.fasterxml.jackson.databind.JsonNode node = mapper.readTree(jsonText);
+                                if (node.has("college") && !node.get("college").asText().trim().isEmpty()) college = node.get("college").asText().trim();
+                                if (node.has("degree") && !node.get("degree").asText().trim().isEmpty()) degree = node.get("degree").asText().trim();
+                                if (node.has("branch") && !node.get("branch").asText().trim().isEmpty()) branch = node.get("branch").asText().trim();
+                                else if (node.has("department") && !node.get("department").asText().trim().isEmpty()) branch = node.get("department").asText().trim();
+                                if (node.has("skills") && !node.get("skills").asText().trim().isEmpty()) skills = node.get("skills").asText().trim();
+                                if (node.has("phone") && !node.get("phone").asText().trim().isEmpty()) phone = node.get("phone").asText().trim();
+                                if (node.has("name") && !node.get("name").asText().trim().isEmpty() && !"Student Candidate".equalsIgnoreCase(node.get("name").asText().trim())) studName = node.get("name").asText().trim();
+                                if (node.has("cgpa")) {
+                                    try { cgpa = node.get("cgpa").asDouble(); } catch (Exception ignored) {}
+                                }
+                            }
+                        } catch (Exception ignored) {}
+                    }
                 }
 
                 if (studName == null || studName.trim().isEmpty() || "Candidate".equalsIgnoreCase(studName.trim()) || "Student Candidate".equalsIgnoreCase(studName.trim())) {
@@ -274,6 +371,23 @@ public class ApplicationRepository {
                 normApp.put("skills", skills);
                 if (phone != null) normApp.put("phone", phone);
 
+                int internshipId = 0;
+                Object iIdObj = normApp.get("internship_id") != null ? normApp.get("internship_id") : normApp.get("INTERNSHIP_ID");
+                if (iIdObj instanceof Number) internshipId = ((Number) iIdObj).intValue();
+
+                int testCount = 0;
+                try {
+                    if (internshipId > 0) {
+                        Integer dbTestCount = jdbcTemplate.queryForObject(
+                            "SELECT COUNT(*) FROM screening_tests WHERE internship_id = ?",
+                            Integer.class, internshipId
+                        );
+                        if (dbTestCount != null) testCount = dbTestCount;
+                    }
+                } catch (Exception ignored) {}
+                normApp.put("has_test", testCount > 0);
+                normApp.put("HAS_TEST", testCount > 0);
+
                 result.add(normApp);
                 if (appId > 0) seenAppIds.add(appId);
             }
@@ -285,11 +399,40 @@ public class ApplicationRepository {
             Map<String, Object> normM = normalizeMap(m);
             Object idObj = normM.get("id") != null ? normM.get("id") : normM.get("ID");
             int appId = idObj instanceof Number ? ((Number) idObj).intValue() : 0;
-            if (appId > 0 && !seenAppIds.contains(appId)) {
+            // Only add from memory if not seen in DB, company matches, and not withdrawn
+            Object cIdObj = normM.get("company_id") != null ? normM.get("company_id") : normM.get("COMPANY_ID");
+            int memCompanyId = cIdObj instanceof Number ? ((Number) cIdObj).intValue() : 0;
+            Object stObj = normM.get("status") != null ? normM.get("status") : normM.get("STATUS");
+            String stStr = stObj != null ? stObj.toString() : "";
+            if (appId > 0 && !seenAppIds.contains(appId) && memCompanyId == companyId
+                    && !"WITHDRAWN".equals(stStr) && !"CANCELLED".equals(stStr) && !"DELETED".equals(stStr)) {
                 result.add(normM);
             }
         }
 
         return result;
+    }
+
+    /**
+     * Removes applications from shared memory when a student withdraws.
+     * Also marks the status in memory so dashboard counts are immediately correct.
+     */
+    public void removeWithdrawnFromMemory(int studentId, int internshipId) {
+        List<Integer> toRemove = new ArrayList<>();
+        for (Map.Entry<Integer, Map<String, Object>> entry : SHARED_MEM_APPLICATIONS.entrySet()) {
+            Map<String, Object> app = entry.getValue();
+            Object sId = app.get("student_id") != null ? app.get("student_id") : app.get("STUDENT_ID");
+            Object iId = app.get("internship_id") != null ? app.get("internship_id") : app.get("INTERNSHIP_ID");
+            boolean sMatch = sId instanceof Number && ((Number) sId).intValue() == studentId;
+            boolean iMatch = internshipId <= 0 || (iId instanceof Number && ((Number) iId).intValue() == internshipId);
+            if (sMatch && iMatch) {
+                app.put("status", "WITHDRAWN");
+                app.put("STATUS", "WITHDRAWN");
+                toRemove.add(entry.getKey());
+            }
+        }
+        for (int key : toRemove) {
+            SHARED_MEM_APPLICATIONS.remove(key);
+        }
     }
 }

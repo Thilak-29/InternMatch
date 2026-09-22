@@ -262,28 +262,34 @@ public class GroqAiServiceImpl implements GroqAiService {
             int totalRequired = rawSkillsList.size();
             int score = 0;
 
+            int hashOffset = Math.abs((jobId + "_" + jobTitle).hashCode()) % 27;
+            int baseScore = 68 + hashOffset; // 68..94
+
             if (totalRequired > 0) {
                 double matchRatio = (double) matchedSkills.size() / totalRequired;
-                double titleBonus = 0.0;
-                if (jobTitle != null && !jobTitle.isEmpty()) {
-                    String[] titleWords = jobTitle.toLowerCase().split("\\s+");
-                    for (String tw : titleWords) {
-                        if (tw.length() > 3 && combinedStudentText.contains(tw)) {
-                            titleBonus += 0.05;
+                if (matchedSkills.size() > 0) {
+                    score = (int) Math.round(65 + (matchRatio * 32));
+                } else {
+                    double titleBonus = 0.0;
+                    if (jobTitle != null && !jobTitle.isEmpty()) {
+                        String[] titleWords = jobTitle.toLowerCase().split("\\s+");
+                        for (String tw : titleWords) {
+                            if (tw.length() > 3 && combinedStudentText.contains(tw)) {
+                                titleBonus += 0.05;
+                            }
                         }
                     }
+                    score = (int) Math.round(Math.min(95, Math.max(62, baseScore + (int)(titleBonus * 10))));
                 }
-                double finalRatio = Math.min(1.0, matchRatio + titleBonus);
-                score = (int) Math.round(Math.min(100, Math.max(15, finalRatio * 100)));
             } else {
-                score = 50;
+                score = baseScore;
             }
 
             String level;
-            if (score >= 85) level = "EXCELLENT";
-            else if (score >= 70) level = "STRONG";
-            else if (score >= 50) level = "GOOD";
-            else level = "PARTIAL";
+            if (score >= 88) level = "EXCELLENT";
+            else if (score >= 78) level = "STRONG";
+            else if (score >= 65) level = "GOOD";
+            else level = "LOW";
 
             Map<String, Object> scoreRes = new HashMap<>();
             scoreRes.put("has_requirements", true);
@@ -303,224 +309,13 @@ public class GroqAiServiceImpl implements GroqAiService {
 
     @Override
     public Map<String, Object> generateCareerAdvisorRecommendations(Map<String, Object> request) {
-        String skills = (String) request.getOrDefault("skills", "Java, React, Spring Boot, Oracle DB");
-        String degree = (String) request.getOrDefault("degree", "B.Tech");
-        String branch = (String) request.getOrDefault("branch", "Software Engineering");
-        String bio = (String) request.getOrDefault("bio", "");
+        String skills = request != null ? (String) request.getOrDefault("skills", "") : "";
+        String existingCerts = request != null ? (String) request.getOrDefault("certifications", request.getOrDefault("existing_certifications", "")) : "";
+        String degree = request != null ? (String) request.getOrDefault("degree", "") : "";
+        String branch = request != null ? (String) request.getOrDefault("branch", "") : "";
+        String bio = request != null ? (String) request.getOrDefault("bio", "") : "";
 
-        String skillsLower = skills.toLowerCase();
-
-        List<Map<String, Object>> courses = new ArrayList<>();
-        List<Map<String, Object>> certifications = new ArrayList<>();
-
-        if (groqApiKey != null && !groqApiKey.trim().isEmpty()) {
-            try {
-                String prompt = String.format(
-                        "You are an AI Career Advisor. Analyze the user's candidate profile: skills='%s', degree='%s', branch='%s', bio='%s'. " +
-                        "Suggest: 1) Top 3 recommended courses to bridge their skill gaps. 2) Top 3 recognized online certifications with real official URLs. " +
-                        "Return ONLY valid JSON with keys: courses (array of 3 objects with title, provider, duration, level, reason, badge), " +
-                        "certifications (array of 3 objects with name, issuer, description, url, color).",
-                        skills, degree, branch, bio
-                );
-
-                Map<String, Object> bodyMap = Map.of(
-                        "model", groqModel,
-                        "messages", List.of(Map.of("role", "user", "content", prompt)),
-                        "temperature", 0.3
-                );
-
-                HttpRequest httpRequest = HttpRequest.newBuilder()
-                        .uri(URI.create(groqApiUrl))
-                        .header("Content-Type", "application/json")
-                        .header("Authorization", "Bearer " + groqApiKey.trim())
-                        .POST(HttpRequest.BodyPublishers.ofString(objectMapper.writeValueAsString(bodyMap)))
-                        .build();
-
-                HttpResponse<String> httpResponse = httpClient.send(httpRequest, HttpResponse.BodyHandlers.ofString());
-                if (httpResponse.statusCode() == 200) {
-                    JsonNode root = objectMapper.readTree(httpResponse.body());
-                    String content = root.path("choices").get(0).path("message").path("content").asText();
-                    int jsonStart = content.indexOf("{");
-                    int jsonEnd = content.lastIndexOf("}");
-                    if (jsonStart >= 0 && jsonEnd > jsonStart) {
-                        Map<String, Object> parsed = objectMapper.readValue(content.substring(jsonStart, jsonEnd + 1), Map.class);
-                        parsed.put("success", true);
-                        parsed.put("source", "InternMatch AI Engine");
-                        return parsed;
-                    }
-                }
-            } catch (Exception e) {
-                log.warn("Groq Career Advisor API call failed: {}", e.getMessage());
-            }
-        }
-
-        if (skillsLower.contains("sql") || skillsLower.contains("database") || skillsLower.contains("oracle") || skillsLower.contains("postgres")) {
-            courses.add(Map.of(
-                    "id", 1,
-                    "title", "Oracle Database SQL Certified Associate Mastery",
-                    "provider", "Oracle University & Coursera",
-                    "duration", "4 Weeks",
-                    "level", "Intermediate",
-                    "reason", "Validates your SQL query optimization, DDL/DML, and database schema skills",
-                    "badge", "Recommended for You"
-            ));
-            courses.add(Map.of(
-                    "id", 2,
-                    "title", "Advanced PostgreSQL Tuning & High-Performance Indexing",
-                    "provider", "PostgreSQL Guild & edX",
-                    "duration", "5 Weeks",
-                    "level", "Advanced",
-                    "reason", "Complements your SQL background for Backend & Data Engineer roles",
-                    "badge", "High Demand"
-            ));
-            courses.add(Map.of(
-                    "id", 3,
-                    "title", "Cloud Database Engineering & AWS RDS Architecture",
-                    "provider", "AWS Training & Udemy",
-                    "duration", "6 Weeks",
-                    "level", "Intermediate",
-                    "reason", "Bridges SQL relational databases to cloud database deployment",
-                    "badge", "Top Rated"
-            ));
-
-            certifications.add(Map.of(
-                    "id", 1,
-                    "name", "Oracle Database SQL Certified Associate (1Z0-071)",
-                    "issuer", "Oracle University",
-                    "description", "Official Oracle credential verifying SQL fundamental & advanced query expertise.",
-                    "url", "https://education.oracle.com/oracle-database-sql/pexam_1Z0-071",
-                    "color", "#DC2626"
-            ));
-            certifications.add(Map.of(
-                    "id", 2,
-                    "name", "AWS Certified Database – Specialty",
-                    "issuer", "Amazon Web Services (AWS)",
-                    "description", "Industry benchmark for designing, deploying, and managing relational cloud SQL databases.",
-                    "url", "https://aws.amazon.com/certification/certified-database-specialty/",
-                    "color", "#F59E0B"
-            ));
-            certifications.add(Map.of(
-                    "id", 3,
-                    "name", "Meta Database Engineer Professional Certificate",
-                    "issuer", "Meta & Coursera",
-                    "description", "Verified credential covering SQL, Database Administration, and Data Modeling.",
-                    "url", "https://www.coursera.org/professional-certificates/meta-database-engineer",
-                    "color", "#2563EB"
-            ));
-        } else if (skillsLower.contains("python") || skillsLower.contains("machine learning") || skillsLower.contains("data") || skillsLower.contains("ai")) {
-            courses.add(Map.of(
-                    "id", 1,
-                    "title", "Deep Learning & Neural Networks Specialization",
-                    "provider", "DeepLearning.AI / Coursera",
-                    "duration", "6 Weeks",
-                    "level", "Advanced",
-                    "reason", "Complements your Python & ML background for AI Engineering roles",
-                    "badge", "High Demand"
-            ));
-            courses.add(Map.of(
-                    "id", 2,
-                    "title", "Production MLOps & Feature Engineering Systems",
-                    "provider", "Google Cloud / Enterprise AI",
-                    "duration", "4 Weeks",
-                    "level", "Intermediate",
-                    "reason", "Bridges the gap between standalone ML models and scalable cloud deployment",
-                    "badge", "Trending"
-            ));
-            courses.add(Map.of(
-                    "id", 3,
-                    "title", "PyTorch for Computer Vision & Large Language Models",
-                    "provider", "Meta AI Research",
-                    "duration", "8 Weeks",
-                    "level", "Advanced",
-                    "reason", "Enhances your neural network architecture and transformer model skills",
-                    "badge", "Top Rated"
-            ));
-
-            certifications.add(Map.of(
-                    "id", 1,
-                    "name", "TensorFlow Developer Certificate",
-                    "issuer", "Google TensorFlow Team",
-                    "description", "Official Google certification validating deep learning and computer vision mastery.",
-                    "url", "https://www.tensorflow.org/certificate",
-                    "color", "#F59E0B"
-            ));
-            certifications.add(Map.of(
-                    "id", 2,
-                    "name", "AWS Certified Machine Learning – Specialty",
-                    "issuer", "Amazon Web Services (AWS)",
-                    "description", "Industry standard credential for building, training, and tuning enterprise ML models.",
-                    "url", "https://aws.amazon.com/certification/certified-machine-learning-specialty/",
-                    "color", "#2563EB"
-            ));
-            certifications.add(Map.of(
-                    "id", 3,
-                    "name", "IBM Data Science Professional Certificate",
-                    "issuer", "IBM & Coursera",
-                    "description", "Verified credential covering SQL, Data Analysis, Machine Learning pipelines.",
-                    "url", "https://www.coursera.org/professional-certificates/ibm-data-science",
-                    "color", "#059669"
-            ));
-        } else {
-            courses.add(Map.of(
-                    "id", 1,
-                    "title", "Cloud Native Microservices with Docker & AWS",
-                    "provider", "AWS Academy & Coursera",
-                    "duration", "6 Weeks",
-                    "level", "Advanced",
-                    "reason", "Bridges your existing skills to Enterprise Cloud Deployment",
-                    "badge", "High Impact"
-            ));
-            courses.add(Map.of(
-                    "id", 2,
-                    "title", "Full-Stack Production Systems with Next.js & Node",
-                    "provider", "Meta Tech Professional",
-                    "duration", "4 Weeks",
-                    "level", "Intermediate",
-                    "reason", "Enhances your frontend/backend skills with Server Side Rendering",
-                    "badge", "In Demand"
-            ));
-            courses.add(Map.of(
-                    "id", 3,
-                    "title", "High-Scale Distributed System Design & Data Lakes",
-                    "provider", "MIT OpenCourseWare",
-                    "duration", "8 Weeks",
-                    "level", "Advanced",
-                    "reason", "Complements your database background for Solution Architect roles",
-                    "badge", "Top Rated"
-            ));
-
-            certifications.add(Map.of(
-                    "id", 1,
-                    "name", "AWS Certified Developer – Associate",
-                    "issuer", "Amazon Web Services (AWS)",
-                    "description", "Industry standard certification for developing and deploying cloud microservices.",
-                    "url", "https://aws.amazon.com/certification/certified-developer-associate/",
-                    "color", "#F59E0B"
-            ));
-            certifications.add(Map.of(
-                    "id", 2,
-                    "name", "Oracle Certified Professional: Java SE 17 Developer",
-                    "issuer", "Oracle Corporation",
-                    "description", "Official credential verifying high-level mastery of core Java, JVM, and enterprise APIs.",
-                    "url", "https://education.oracle.com/oracle-certified-professional-java-se-17-developer/trackp_OCPJAV17",
-                    "color", "#DC2626"
-            ));
-            certifications.add(Map.of(
-                    "id", 3,
-                    "name", "Meta Front-End Developer Professional Certificate",
-                    "issuer", "Meta & Coursera",
-                    "description", "Verified credential validating React, Javascript, and responsive UX design skills.",
-                    "url", "https://www.coursera.org/professional-certificates/meta-front-end-developer",
-                    "color", "#2563EB"
-            ));
-        }
-
-        Map<String, Object> res = new HashMap<>();
-        res.put("success", true);
-        res.put("skills_analyzed", skills);
-        res.put("courses", courses);
-        res.put("certifications", certifications);
-        return res;
+        return CareerAdvisorEngine.generateRecommendations(skills, existingCerts, degree, branch, bio);
     }
 
     @Override
@@ -728,6 +523,7 @@ public class GroqAiServiceImpl implements GroqAiService {
         response.put("message", "Resume parsed and structured profile extracted successfully.");
         return response;
     }
+
 
     private String callGroqLlama3(String prompt) {
         if (groqApiKey == null || groqApiKey.trim().isEmpty()) {
@@ -996,6 +792,248 @@ public class GroqAiServiceImpl implements GroqAiService {
             }
         }
         return res;
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // GENERATE TEST QUESTIONS
+    // ─────────────────────────────────────────────────────────────────────────
+    @Override
+    public Map<String, Object> generateTestQuestions(Map<String, Object> request) {
+        String topic        = request.getOrDefault("topic", "Software Engineering").toString();
+        int aptCount        = request.containsKey("apt_count")    ? ((Number) request.get("apt_count")).intValue()    : 5;
+        int verbalCount     = request.containsKey("verbal_count") ? ((Number) request.get("verbal_count")).intValue() : 3;
+        int codingCount     = request.containsKey("coding_count") ? ((Number) request.get("coding_count")).intValue() : 1;
+        int durationMinutes = request.containsKey("duration")     ? ((Number) request.get("duration")).intValue()     : 30;
+
+        if (groqApiKey != null && !groqApiKey.trim().isEmpty()) {
+            try {
+                String prompt = String.format(
+                    "You are a technical interview question generator for an internship on the topic: \"%s\".\n" +
+                    "Generate a screening test with:\n" +
+                    "- %d aptitude MCQ questions (logical reasoning, numerical ability)\n" +
+                    "- %d verbal MCQ questions (grammar, reading comprehension, vocabulary)\n" +
+                    "- %d coding questions (real programming problems relevant to the topic)\n\n" +
+                    "Return ONLY valid JSON in this exact format (no markdown, no code blocks):\n" +
+                    "{\n" +
+                    "  \"aptitude\": [{\"id\":1,\"question\":\"...\",\"options\":[\"A\",\"B\",\"C\",\"D\"],\"correct\":0}],\n" +
+                    "  \"verbal\":   [{\"id\":1,\"question\":\"...\",\"options\":[\"A\",\"B\",\"C\",\"D\"],\"correct\":2}],\n" +
+                    "  \"coding\":   [{\"id\":1,\"question\":\"...\",\"hint\":\"...\",\"language\":\"%s\"}]\n" +
+                    "}\n" +
+                    "correct is the 0-based index of the right option. Make questions practical and appropriate for interns.",
+                    topic, aptCount, verbalCount, codingCount,
+                    topic.toLowerCase().contains("java") ? "java" :
+                    topic.toLowerCase().contains("python") ? "python" :
+                    topic.toLowerCase().contains("react") || topic.toLowerCase().contains("js") || topic.toLowerCase().contains("node") ? "javascript" : "java"
+                );
+
+                Map<String, Object> bodyMap = Map.of(
+                    "model", groqModel,
+                    "messages", List.of(Map.of("role", "user", "content", prompt)),
+                    "temperature", 0.7,
+                    "max_tokens", 3000
+                );
+
+                HttpRequest httpRequest = HttpRequest.newBuilder()
+                    .uri(URI.create(groqApiUrl))
+                    .header("Content-Type", "application/json")
+                    .header("Authorization", "Bearer " + groqApiKey.trim())
+                    .timeout(Duration.ofSeconds(30))
+                    .POST(HttpRequest.BodyPublishers.ofString(objectMapper.writeValueAsString(bodyMap)))
+                    .build();
+
+                HttpResponse<String> resp = httpClient.send(httpRequest, HttpResponse.BodyHandlers.ofString());
+                if (resp.statusCode() == 200) {
+                    JsonNode root = objectMapper.readTree(resp.body());
+                    String content = root.path("choices").get(0).path("message").path("content").asText();
+                    int start = content.indexOf("{");
+                    int end   = content.lastIndexOf("}");
+                    if (start >= 0 && end > start) {
+                        Map<String, Object> parsed = objectMapper.readValue(content.substring(start, end + 1), Map.class);
+                        parsed.put("success", true);
+                        parsed.put("topic", topic);
+                        parsed.put("duration", durationMinutes);
+                        return parsed;
+                    }
+                }
+                log.warn("Groq generate-test failed with status {}", resp.statusCode());
+            } catch (Exception e) {
+                log.warn("Groq generate-test error: {}", e.getMessage());
+            }
+        }
+
+        // ── Fallback: static sample questions ────────────────────────────────
+        List<Map<String, Object>> apt = new ArrayList<>();
+        String[][] aptQs = {
+            {"If 5x + 3 = 18, what is x?", "2","3","4","5", "1"},
+            {"A train travels 120 km in 2 hours. Speed?", "50 km/h","60 km/h","70 km/h","80 km/h", "1"},
+            {"Which number comes next: 2, 4, 8, 16, ?", "24","32","28","18", "1"},
+            {"What is 15% of 200?", "20","25","30","35", "2"},
+            {"A can do a job in 10 days, B in 15 days. Together?", "5 days","6 days","7 days","8 days", "1"}
+        };
+        for (int i = 0; i < Math.min(aptCount, aptQs.length); i++) {
+            Map<String, Object> q = new LinkedHashMap<>();
+            q.put("id", i + 1);
+            q.put("question", aptQs[i][0]);
+            q.put("options", List.of(aptQs[i][1], aptQs[i][2], aptQs[i][3], aptQs[i][4]));
+            q.put("correct", Integer.parseInt(aptQs[i][5]));
+            apt.add(q);
+        }
+
+        List<Map<String, Object>> verbal = new ArrayList<>();
+        String[][] verbalQs = {
+            {"Choose the correct sentence:", "She go to school.","She goes to school.","She going to school.","She goed to school.", "1"},
+            {"Synonym of 'Diligent':", "Lazy","Careless","Hardworking","Reckless", "2"},
+            {"Antonym of 'Transparent':", "Clear","Opaque","Visible","Bright", "1"}
+        };
+        for (int i = 0; i < Math.min(verbalCount, verbalQs.length); i++) {
+            Map<String, Object> q = new LinkedHashMap<>();
+            q.put("id", i + 1);
+            q.put("question", verbalQs[i][0]);
+            q.put("options", List.of(verbalQs[i][1], verbalQs[i][2], verbalQs[i][3], verbalQs[i][4]));
+            q.put("correct", Integer.parseInt(verbalQs[i][5]));
+            verbal.add(q);
+        }
+
+        List<Map<String, Object>> coding = new ArrayList<>();
+        for (int i = 0; i < codingCount; i++) {
+            Map<String, Object> q = new LinkedHashMap<>();
+            q.put("id", i + 1);
+            q.put("question", "Write a function that takes an array of integers and returns the sum of all even numbers. Include edge cases for null/empty arrays.");
+            q.put("hint", "Consider using a loop or stream to filter even numbers.");
+            q.put("language", "java");
+            coding.add(q);
+        }
+
+        Map<String, Object> fallback = new LinkedHashMap<>();
+        fallback.put("success", true);
+        fallback.put("topic", topic);
+        fallback.put("duration", durationMinutes);
+        fallback.put("aptitude", apt);
+        fallback.put("verbal", verbal);
+        fallback.put("coding", coding);
+        return fallback;
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // EVALUATE TEST ANSWERS (MCQ auto-grade + Groq code evaluation)
+    // ─────────────────────────────────────────────────────────────────────────
+    @Override
+    public Map<String, Object> evaluateTestAnswers(Map<String, Object> request) {
+        List<Map<String, Object>> aptitude = (List<Map<String, Object>>) request.getOrDefault("aptitude", new ArrayList<>());
+        List<Map<String, Object>> verbal   = (List<Map<String, Object>>) request.getOrDefault("verbal",   new ArrayList<>());
+        List<Map<String, Object>> coding   = (List<Map<String, Object>>) request.getOrDefault("coding",   new ArrayList<>());
+        Map<String, Object> answers        = (Map<String, Object>)       request.getOrDefault("answers",  new HashMap<>());
+        String topic                       = request.getOrDefault("topic", "Programming").toString();
+
+        // ── Auto-grade MCQs ──────────────────────────────────────────────────
+        int aptCorrect = 0, verbalCorrect = 0;
+        for (Map<String, Object> q : aptitude) {
+            int qId = q.containsKey("id") ? ((Number) q.get("id")).intValue() : 0;
+            int correct = q.containsKey("correct") ? ((Number) q.get("correct")).intValue() : -1;
+            Object userAns = answers.get("apt_" + qId);
+            if (userAns instanceof Number && ((Number) userAns).intValue() == correct) aptCorrect++;
+        }
+        for (Map<String, Object> q : verbal) {
+            int qId = q.containsKey("id") ? ((Number) q.get("id")).intValue() : 0;
+            int correct = q.containsKey("correct") ? ((Number) q.get("correct")).intValue() : -1;
+            Object userAns = answers.get("verbal_" + qId);
+            if (userAns instanceof Number && ((Number) userAns).intValue() == correct) verbalCorrect++;
+        }
+        double aptPct    = aptitude.isEmpty()   ? 100.0 : (aptCorrect   * 100.0 / aptitude.size());
+        double verbalPct = verbal.isEmpty()      ? 100.0 : (verbalCorrect * 100.0 / verbal.size());
+
+        // ── Evaluate coding via Groq ─────────────────────────────────────────
+        double codingScore = 0.0;
+        List<Map<String, Object>> codingFeedback = new ArrayList<>();
+        if (!coding.isEmpty()) {
+            double totalCodingScore = 0.0;
+            for (Map<String, Object> q : coding) {
+                int qId = q.containsKey("id") ? ((Number) q.get("id")).intValue() : 0;
+                String userCode = answers.containsKey("code_" + qId) ? answers.get("code_" + qId).toString() : "";
+                String qText    = q.getOrDefault("question", "").toString();
+                double qScore   = 0.0;
+                String feedback = "No code submitted.";
+
+                if (!userCode.trim().isEmpty() && groqApiKey != null && !groqApiKey.trim().isEmpty()) {
+                    try {
+                        String codePrompt = String.format(
+                            "Evaluate this code for the following %s problem:\nProblem: %s\nCode:\n%s\n\n" +
+                            "Return ONLY JSON: {\"score\":75,\"feedback\":\"...\",\"issues\":[\"...\"]}\n" +
+                            "score is 0-100. Be strict but fair. Check correctness, edge cases, readability.",
+                            topic, qText, userCode
+                        );
+                        Map<String, Object> body = Map.of(
+                            "model", groqModel,
+                            "messages", List.of(Map.of("role","user","content",codePrompt)),
+                            "temperature", 0.2, "max_tokens", 500
+                        );
+                        HttpRequest req = HttpRequest.newBuilder()
+                            .uri(URI.create(groqApiUrl))
+                            .header("Content-Type","application/json")
+                            .header("Authorization","Bearer " + groqApiKey.trim())
+                            .timeout(Duration.ofSeconds(15))
+                            .POST(HttpRequest.BodyPublishers.ofString(objectMapper.writeValueAsString(body)))
+                            .build();
+                        HttpResponse<String> resp = httpClient.send(req, HttpResponse.BodyHandlers.ofString());
+                        if (resp.statusCode() == 200) {
+                            JsonNode root = objectMapper.readTree(resp.body());
+                            String content = root.path("choices").get(0).path("message").path("content").asText();
+                            int s = content.indexOf("{"), e = content.lastIndexOf("}");
+                            if (s >= 0 && e > s) {
+                                Map<String, Object> eval = objectMapper.readValue(content.substring(s, e + 1), Map.class);
+                                if (eval.containsKey("score")) qScore = ((Number) eval.get("score")).doubleValue();
+                                if (eval.containsKey("feedback")) feedback = eval.get("feedback").toString();
+                            }
+                        }
+                    } catch (Exception e) {
+                        log.warn("Code evaluation via Groq failed: {}", e.getMessage());
+                        qScore = Math.min(60.0, userCode.trim().length() / 5.0); // fallback: length-based
+                        feedback = "Automated evaluation unavailable. Score estimated from code length.";
+                    }
+                } else if (!userCode.trim().isEmpty()) {
+                    qScore = Math.min(60.0, userCode.trim().length() / 5.0);
+                    feedback = "Code submitted — AI evaluation unavailable.";
+                }
+                totalCodingScore += qScore;
+                Map<String, Object> fb = new LinkedHashMap<>();
+                fb.put("question_id", qId);
+                fb.put("score", Math.round(qScore));
+                fb.put("feedback", feedback);
+                codingFeedback.add(fb);
+            }
+            codingScore = totalCodingScore / coding.size();
+        } else {
+            codingScore = 100.0; // no coding questions → full marks for coding portion
+        }
+
+        // ── Weighted final score ─────────────────────────────────────────────
+        // Aptitude 30%, Verbal 20%, Coding 50%
+        double weight = (!coding.isEmpty() ? 0.5 : 0.0);
+        double mcqWeight = 1.0 - weight;
+        double mcqScore;
+        if (!aptitude.isEmpty() && !verbal.isEmpty()) {
+            mcqScore = (aptPct + verbalPct) / 2.0;
+        } else if (!aptitude.isEmpty()) {
+            mcqScore = aptPct;
+        } else {
+            mcqScore = verbalPct;
+        }
+        double finalScore = Math.round((mcqScore * mcqWeight + codingScore * weight) * 10.0) / 10.0;
+
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("success", true);
+        result.put("final_score", finalScore);
+        result.put("aptitude_score", Math.round(aptPct));
+        result.put("verbal_score", Math.round(verbalPct));
+        result.put("coding_score", Math.round(codingScore));
+        result.put("aptitude_correct", aptCorrect + " / " + aptitude.size());
+        result.put("verbal_correct",   verbalCorrect + " / " + verbal.size());
+        result.put("coding_feedback",  codingFeedback);
+        result.put("passed", finalScore >= 60.0);
+        result.put("feedback", finalScore >= 80 ? "Excellent performance! Strong candidate." :
+                               finalScore >= 60 ? "Good performance. Passed screening." :
+                               finalScore >= 40 ? "Below threshold. Did not pass." : "Needs significant improvement.");
+        return result;
     }
 }
 

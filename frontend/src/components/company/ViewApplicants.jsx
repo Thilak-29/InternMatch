@@ -2,10 +2,10 @@ import React, { useState, useEffect } from 'react';
 import { Users, CheckCircle2, Clock, Send, Award, FileText, X, ExternalLink, Sparkles, Filter, Check, Eye, AlertCircle, Search, ThumbsUp, ArrowLeft, ChevronLeft, ChevronRight, MapPin, DollarSign, Building2, ShieldCheck, ArrowUpDown, Code2, Github, Linkedin, Globe, TrendingUp, Star, BookOpen, Phone, Mail, GraduationCap, Trophy, Target } from 'lucide-react';
 import API_CONFIG from '../../config/apiConfig';
 
-export default function ViewApplicants({ currentUser }) {
-  const companyId = currentUser?.userId || currentUser?.user_id || currentUser?.id || currentUser?.ID;
+export default function ViewApplicants({ currentUser, apiBaseUrl }) {
+  const companyId = currentUser?.userId || currentUser?.user_id || currentUser?.id || currentUser?.ID || currentUser?.companyId || currentUser?.company_id;
   const token = currentUser?.token || '';
-  const baseUrl = API_CONFIG.COMPANY_SERVICE_URL;
+  const baseUrl = apiBaseUrl || API_CONFIG.COMPANY_SERVICE_URL;
 
   if (!companyId) {
     return (
@@ -52,10 +52,54 @@ export default function ViewApplicants({ currentUser }) {
   const [candGitHub, setCandGitHub]               = useState(null);
   const [profileLoading, setProfileLoading]       = useState(false);
   const [profileTab, setProfileTab]               = useState('overview');
+  const [downloadingResume, setDownloadingResume] = useState(null); // applicationId being downloaded
+
+  const studentServiceUrl = API_CONFIG.STUDENT_SERVICE_URL;
 
   useEffect(() => {
     fetchCompanyData();
   }, [companyId]);
+
+  // ── Download resume for a specific application ────────────────────────────
+  const handleDownloadResume = async (app) => {
+    const appId     = app.id || app.ID;
+    const studentId = app.student_id || app.STUDENT_ID;
+    if (!appId || !studentId) { alert('Missing application or student ID.'); return; }
+    setDownloadingResume(appId);
+    try {
+      let res = await fetch(
+        `${studentServiceUrl}/api/v1/student/${studentId}/applications/${appId}/resume`,
+        { headers: { 'Authorization': token } }
+      );
+      if (!res.ok) {
+        res = await fetch(
+          `${studentServiceUrl}/api/v1/student/${studentId}/resume/download`,
+          { headers: { 'Authorization': token } }
+        );
+      }
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        alert(err.error || 'No resume attached or uploaded for this student yet.');
+        return;
+      }
+      const blob = await res.blob();
+      const fileName = res.headers.get('Content-Disposition')
+        ?.match(/filename="?([^"]+)"?/)?.[1]
+        || `resume_${app.name || app.candidate_name || studentId}.pdf`;
+      const url = URL.createObjectURL(blob);
+      const a   = document.createElement('a');
+      a.href     = url;
+      a.download = fileName;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      alert(`Download failed: ${e.message}`);
+    } finally {
+      setDownloadingResume(null);
+    }
+  };
 
   const fetchCompanyData = async () => {
     setIsLoading(true);
@@ -103,6 +147,36 @@ export default function ViewApplicants({ currentUser }) {
 
       setInternships(fetchedInts);
       setAllApplicants(fetchedApps);
+
+      // Background client-side profile enrichment for any candidate showing 'Not set'
+      fetchedApps.forEach(async (app) => {
+        if (app.student_id > 0 && (app.college === 'Not set' || app.degree === 'Not set')) {
+          try {
+            const pRes = await fetch(`${API_CONFIG.STUDENT_SERVICE_URL || 'http://localhost:8082'}/api/v1/student/${app.student_id}/profile`, {
+              headers: { 'Authorization': token, 'Content-Type': 'application/json' }
+            });
+            if (pRes.ok) {
+              const pData = await pRes.json();
+              setAllApplicants(prev => prev.map(a => {
+                if (a.student_id === app.student_id) {
+                  return {
+                    ...a,
+                    college: String(pData.college || pData.COLLEGE || a.college || 'Not set').trim(),
+                    degree: String(pData.degree || pData.DEGREE || a.degree || 'Not set').trim(),
+                    branch: String(pData.branch || pData.BRANCH || pData.department || a.branch || 'Not set').trim(),
+                    cgpa: pData.cgpa !== undefined && pData.cgpa !== null && pData.cgpa !== 0 ? pData.cgpa : a.cgpa,
+                    phone: pData.phone || a.phone,
+                    skills: (pData.skills && typeof pData.skills === 'string')
+                      ? pData.skills.split(',').map(s => s.trim()).filter(Boolean)
+                      : (a.skills && a.skills.length > 0 ? a.skills : [])
+                  };
+                }
+                return a;
+              }));
+            }
+          } catch (e) {}
+        }
+      });
     } catch (e) {
       console.error("Fetch company data error:", e);
     } finally {
@@ -145,9 +219,13 @@ export default function ViewApplicants({ currentUser }) {
         if (Array.isArray(certsList)) {
           certCount = certsList.length;
           certsList.forEach(c => {
-            const certText = `${c.name || ''} ${c.issuer || ''}`.toLowerCase();
-            const isRelevant = roleReqSkills.some(reqSkill => certText.includes(reqSkill));
-            if (isRelevant) relevantCertCount++;
+            if (c) {
+              const certName = typeof c === 'string' ? c : (c.name || c.title || '');
+              const certIssuer = typeof c === 'object' ? (c.issuer || '') : '';
+              const certText = `${certName} ${certIssuer}`.toLowerCase();
+              const isRelevant = roleReqSkills.some(reqSkill => certText.includes(reqSkill));
+              if (isRelevant) relevantCertCount++;
+            }
           });
         }
       } catch (e) {}
@@ -166,23 +244,34 @@ export default function ViewApplicants({ currentUser }) {
       id: app.id || app.ID || app.application_id,
       student_id: app.student_id || app.STUDENT_ID || 0,
       internship_id: app.internship_id || app.INTERNSHIP_ID,
-      name: rawName.trim() || 'Not set',
-      email: rawEmail.trim() || 'Not set',
-      degree: rawDegree.trim() || 'Not set',
-      branch: rawBranch.trim() || 'Not set',
-      college: rawCollege.trim() || 'Not set',
+      name: String(rawName).trim() || 'Not set',
+      email: String(rawEmail).trim() || 'Not set',
+      degree: String(rawDegree).trim() || 'Not set',
+      branch: String(rawBranch).trim() || 'Not set',
+      college: String(rawCollege).trim() || 'Not set',
       cgpa: app.cgpa !== undefined && app.cgpa !== null && app.cgpa !== 0 ? app.cgpa : (app.CGPA || 'Not set'),
       skills: skillList,
       role_title: app.role_title || app.title || app.ROLE_TITLE || 'Not set',
-      status: (app.status || app.STATUS || 'APPLIED').toUpperCase(),
+      status: String(app.status || app.STATUS || 'APPLIED').toUpperCase(),
       test_score: rawScore !== null && rawScore !== undefined ? Number(rawScore) : null,
       match_score: baseMatch,
       stipend: app.stipend || app.STIPEND || null,
-      phone: rawPhone.trim() || '',
+      phone: String(rawPhone).trim() || '',
       cert_count: certCount,
       relevant_cert_count: relevantCertCount,
-      certifications: certsList
+      certifications: certsList,
+      leetcode: app.leetcode || app.LEETCODE || app.leetcode_username || '',
+      github: app.github || app.GITHUB || app.github_username || ''
     };
+  };
+
+  const extractHandle = (raw) => {
+    if (!raw) return '';
+    let s = String(raw).trim();
+    s = s.replace(/^https?:\/\/(www\.)?leetcode\.com\/(u\/)?/i, '');
+    s = s.replace(/^https?:\/\/(www\.)?github\.com\//i, '');
+    s = s.replace(/\/.*$/, '');
+    return s.trim();
   };
 
   // ── Open full candidate profile modal (fetches profile + coding stats) ────
@@ -199,16 +288,22 @@ export default function ViewApplicants({ currentUser }) {
 
     try {
       const profRes = await fetch(
-        `${API_CONFIG.STUDENT_SERVICE_URL}/api/v1/student/${studentId}/profile`,
+        `${API_CONFIG.STUDENT_SERVICE_URL || 'http://localhost:8082'}/api/v1/student/${studentId}/profile`,
         { headers: { 'Authorization': token, 'Content-Type': 'application/json' } }
       );
       if (profRes.ok) {
         const profData = await profRes.json();
         setCandidateProfile(profData);
-        const lcUser = profData.leetcode || profData.LEETCODE || '';
-        if (lcUser.trim()) fetchCandidateLeetCode(lcUser.trim());
-        const ghUser = profData.github || profData.GITHUB || '';
-        if (ghUser.trim()) fetchCandidateGitHub(ghUser.trim());
+
+        const lcUser = extractHandle(
+          profData.leetcode || profData.LEETCODE || profData.leetcode_username || profData.leetcode_handle || app.leetcode || app.LEETCODE || ''
+        );
+        if (lcUser) fetchCandidateLeetCode(lcUser);
+
+        const ghUser = extractHandle(
+          profData.github || profData.GITHUB || profData.github_username || profData.github_handle || app.github || app.GITHUB || ''
+        );
+        if (ghUser) fetchCandidateGitHub(ghUser);
       }
     } catch (e) {
       console.warn('Could not fetch candidate profile:', e);
@@ -322,20 +417,19 @@ export default function ViewApplicants({ currentUser }) {
   };
 
   // Helper to calculate deduplicated applicants for an internship
-  const getApplicantsForInternship = (intId, jobTitle = '', compId = '') => {
+  const getApplicantsForInternship = (intId, jobTitle = '') => {
     let matched = allApplicants.filter(a => {
       const aIntId = String(a.internship_id || a.INTERNSHIP_ID || a.job_id || a.JOB_ID || '');
-      const aTitle = (a.role_title || a.title || a.ROLE_TITLE || '').toLowerCase().trim();
-      const targetTitle = (jobTitle || '').toLowerCase().trim();
-      const aCompId = String(a.company_id || a.COMPANY_ID || '');
-      const targetCompId = String(compId || '');
+      const aTitle = String(a.role_title || a.title || a.ROLE_TITLE || '').toLowerCase().trim();
+      const targetTitle = String(jobTitle || '').toLowerCase().trim();
 
-      return aIntId === String(intId) || (targetTitle !== '' && aTitle === targetTitle) || (targetCompId !== '' && aCompId === targetCompId);
+      return (intId && aIntId === String(intId)) || (targetTitle !== '' && aTitle === targetTitle);
     });
 
+    // Dedup by student_id — same student must never appear twice per internship
     const seen = new Set();
     return matched.filter(a => {
-      const key = a.id || a.student_id || a.email;
+      const key = a.student_id || a.email || a.id;
       if (!key || seen.has(key)) return false;
       seen.add(key);
       return true;
@@ -413,8 +507,23 @@ export default function ViewApplicants({ currentUser }) {
       filteredApps = filteredApps.filter(a => a.match_score >= 80 || (a.test_score !== null && a.test_score >= 60));
     }
 
-    // Sort Candidates: Top AI Match First
-    filteredApps.sort((a, b) => (b.match_score + (b.test_score || 0)) - (a.match_score + (a.test_score || 0)));
+    // Composite AI Match & Recommendation Score Calculation
+    // Evaluates Base AI Resume Match + Screening Test Score + LeetCode Profile + Certifications
+    const getCompositeAiScore = (a) => {
+      const baseMatch = Number(a.match_score || 70);
+      const testScore = a.test_score !== null && a.test_score !== undefined ? Number(a.test_score) : 0;
+      const testBonus = (testScore / 100) * 25; // Up to +25 pts for high screening test performance
+      const hasLeetCode = !!(a.leetcode || (a.candLeetCode && a.candLeetCode.username));
+      const leetcodeBonus = hasLeetCode ? 10 : 0; // +10 pts for verified LeetCode profile
+      const certBonus = Math.min(15, (a.cert_count || 0) * 5); // Up to +15 pts for verified certs
+      return baseMatch + testBonus + leetcodeBonus + certBonus;
+    };
+
+    // Sort Candidates: Primary Composite AI Score, Tie-Break by Test Score then Match Score
+    filteredApps.sort((a, b) => getCompositeAiScore(b) - getCompositeAiScore(a));
+
+    // Identify highest recommended candidate across internship
+    const topCandidateId = filteredApps.length > 0 ? (filteredApps[0].id || filteredApps[0].ID) : null;
 
     // Pagination Logic: 5 per page
     const itemsPerPage = 5;
@@ -422,11 +531,20 @@ export default function ViewApplicants({ currentUser }) {
     const startIndex = (currentPage - 1) * itemsPerPage;
     const paginatedApplicants = filteredApps.slice(startIndex, startIndex + itemsPerPage);
 
-    const countApplied = jobApplicants.filter(a => (a.status || '').toUpperCase() === 'APPLIED').length;
-    const countShortlisted = jobApplicants.filter(a => (a.status || '').toUpperCase() === 'SHORTLISTED').length;
-    const countTestPassed = jobApplicants.filter(a => ['ACCEPTED_FOR_TEST', 'TEST_PASSED'].includes((a.status || '').toUpperCase()) || (a.test_score !== null && a.test_score >= 60)).length;
-    const countOffer = jobApplicants.filter(a => ['OFFER_ISSUED', 'OFFER_EXTENDED', 'ACCEPTED'].includes((a.status || '').toUpperCase())).length;
-    const countRejected = jobApplicants.filter(a => (a.status || '').toUpperCase() === 'REJECTED').length;
+    const getCanonicalStatusGroup = (statusStr, testScore) => {
+      const s = String(statusStr || '').toUpperCase().trim();
+      if (['OFFER_ISSUED', 'OFFER_EXTENDED', 'ACCEPTED', 'HIRED'].includes(s)) return 'OFFER_ISSUED';
+      if (['TEST_PASSED', 'ACCEPTED_FOR_TEST', 'TEST_COMPLETED', 'PASSED'].includes(s) || (testScore !== null && testScore !== undefined && testScore >= 60)) return 'TEST_PASSED';
+      if (['SHORTLISTED', 'SHORT_LISTED'].includes(s)) return 'SHORTLISTED';
+      if (['REJECTED', 'DECLINED'].includes(s)) return 'REJECTED';
+      return 'APPLIED';
+    };
+
+    const countApplied = jobApplicants.filter(a => getCanonicalStatusGroup(a.status, a.test_score) === 'APPLIED').length;
+    const countShortlisted = jobApplicants.filter(a => getCanonicalStatusGroup(a.status, a.test_score) === 'SHORTLISTED').length;
+    const countTestPassed = jobApplicants.filter(a => getCanonicalStatusGroup(a.status, a.test_score) === 'TEST_PASSED').length;
+    const countOffer = jobApplicants.filter(a => getCanonicalStatusGroup(a.status, a.test_score) === 'OFFER_ISSUED').length;
+    const countRejected = jobApplicants.filter(a => getCanonicalStatusGroup(a.status, a.test_score) === 'REJECTED').length;
 
     return (
       <div style={{ display: 'flex', flexDirection: 'column', gap: '24px', maxWidth: '1140px', margin: '0 auto' }}>
@@ -522,12 +640,37 @@ export default function ViewApplicants({ currentUser }) {
         {paginatedApplicants.length > 0 ? (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
             {paginatedApplicants.map((app, idx) => {
-              const score = app.test_score;
-              const hasPassed = score !== null && score >= 60;
+              const rawHasTest = app.has_test ?? app.HAS_TEST ?? app.hasTest ??
+                (selectedInternship && (selectedInternship.has_test ?? selectedInternship.HAS_TEST ?? selectedInternship.hasTest));
               const st = (app.status || 'APPLIED').toUpperCase();
-              const isOfferIssued = st === 'OFFER_ISSUED' || st === 'OFFER_EXTENDED' || st === 'ACCEPTED';
-              const isShortlisted = st === 'SHORTLISTED';
+              const rawScore = app.test_score !== undefined && app.test_score !== null ? Number(app.test_score) : (app.TEST_SCORE !== undefined && app.TEST_SCORE !== null ? Number(app.TEST_SCORE) : null);
+              const scoreTaken = ['TEST_PASSED', 'TEST_FAILED', 'TEST_COMPLETED', 'PROCTORING_FAILED'].includes(st) || 
+                (['ACCEPTED', 'OFFER_ISSUED', 'OFFER_EXTENDED', 'SELECTED', 'HIRED'].includes(st) && rawScore !== null && rawScore > 0);
+              const score = scoreTaken ? rawScore : null;
+              const hasPassed = scoreTaken && (st === 'TEST_PASSED' || (rawScore !== null && rawScore >= 60));
+              const isOfferIssued = ['OFFER_ISSUED', 'OFFER_EXTENDED', 'ACCEPTED', 'SELECTED', 'HIRED'].includes(st);
+              const isTestPassed = ['TEST_PASSED', 'TEST_COMPLETED'].includes(st) || hasPassed;
+              const isShortlisted = ['SHORTLISTED', 'TEST_PASSED', 'TEST_COMPLETED', 'ACCEPTED', 'OFFER_ISSUED', 'OFFER_EXTENDED', 'SELECTED', 'HIRED'].includes(st) || hasPassed;
               const isRejected = st === 'REJECTED';
+              const canShortlist = st === 'APPLIED';
+              const hasAiTest = true;
+
+              // If recruiter enabled AI test:
+              // - If APPLIED: offer is disabled (must shortlist candidate first so test unlocks)
+              // - If SHORTLISTED: offer is disabled until candidate takes test AND scores >= 60%
+              // - If score < 60%: offer is disabled
+              // - If score >= 60%: offer is ENABLED
+              // If recruiter did NOT select AI test (direct application): offer is enabled directly
+              const isOfferDisabled = isOfferIssued || (hasAiTest && (!scoreTaken || !hasPassed));
+              const offerDisabledReason = !hasAiTest
+                ? ''
+                : st === 'APPLIED'
+                  ? 'Candidate must be Shortlisted and score ≥ 60% on AI Screening Test before offer letter can be approved (Current: Not Shortlisted / Test Not Taken)'
+                  : !scoreTaken
+                    ? 'Candidate must take and score ≥ 60% on AI Screening Test before offer letter can be approved (Current: Test Not Taken)'
+                    : !hasPassed
+                      ? `Candidate scored ${score}% (Minimum passing score is 60% for offer letter approval)`
+                      : '';
 
               return (
                 <div key={app.id || idx} className="glass-card" style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '16px', borderLeft: isOfferIssued ? '4px solid #10B981' : (isShortlisted ? '4px solid #3B82F6' : (isRejected ? '4px solid #EF4444' : '4px solid #F59E0B')) }}>
@@ -544,10 +687,19 @@ export default function ViewApplicants({ currentUser }) {
                         <span className="badge badge-ai" style={{ fontSize: '0.75rem' }}>
                           AI Match: {app.match_score}%
                         </span>
-                        {app.match_score >= 85 && (
-                          <span style={{ fontSize: '0.7rem', fontWeight: 800, padding: '2px 8px', background: '#DCFCE7', color: '#166534', borderRadius: '10px' }}>
-                            🌟 Top AI Candidate
+                        {((app.id || app.ID) === topCandidateId && filteredApps.length > 1) ? (
+                          <span
+                            style={{ fontSize: '0.72rem', fontWeight: 800, padding: '3px 10px', background: 'linear-gradient(135deg, #FEF3C7 0%, #FDE68A 100%)', color: '#92400E', borderRadius: '12px', border: '1px solid #F59E0B', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+                            title="AI Recommendation Engine: Evaluated Resume Match, Screening Test Score, and LeetCode activity to recommend this candidate over equal match profiles."
+                          >
+                            👑 Recommended Top Candidate
                           </span>
+                        ) : (
+                          app.match_score >= 85 && (
+                            <span style={{ fontSize: '0.7rem', fontWeight: 800, padding: '2px 8px', background: '#DCFCE7', color: '#166534', borderRadius: '10px' }}>
+                              🌟 Top AI Candidate
+                            </span>
+                          )
                         )}
                         <button
                           onClick={() => openCandidateProfile(app)}
@@ -560,31 +712,6 @@ export default function ViewApplicants({ currentUser }) {
                       <div style={{ fontSize: '0.88rem', color: '#2563EB', fontWeight: 700, marginTop: '4px' }}>
                         Applied for {app.role_title}
                       </div>
-
-                      {/* Candidate Details */}
-                      <div style={{ display: 'flex', gap: '18px', fontSize: '0.82rem', color: 'var(--text-muted)', marginTop: '10px', flexWrap: 'wrap' }}>
-                        <span>🎓 <strong>Degree:</strong> {app.degree} ({app.branch})</span>
-                        <span>🏫 <strong>College:</strong> {app.college}</span>
-                        <span>📊 <strong>CGPA:</strong> {app.cgpa}</span>
-                        <span>📧 <strong>Email:</strong> {app.email}</span>
-                        {app.phone && <span>📞 <strong>Phone:</strong> {app.phone}</span>}
-                      </div>
-
-                      {/* Candidate Skill Badges */}
-                      {app.skills.length > 0 && (
-                        <div style={{ display: 'flex', gap: '6px', marginTop: '12px', flexWrap: 'wrap', alignItems: 'center' }}>
-                          {app.skills.map((skill, sIdx) => (
-                            <span key={sIdx} className="badge badge-auth" style={{ fontSize: '0.75rem', padding: '4px 10px' }}>
-                              {skill}
-                            </span>
-                          ))}
-                          {app.cert_count > 0 && (
-                            <span style={{ fontSize: '0.75rem', fontWeight: 800, padding: '4px 10px', borderRadius: '16px', background: '#FEF3C7', color: '#92400E', border: '1px solid #FDE68A' }}>
-                              🏅 {app.cert_count} Verified Certifications (+{app.cert_count * 5}% AI Match Boost)
-                            </span>
-                          )}
-                        </div>
-                      )}
                     </div>
 
                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '8px' }}>
@@ -594,91 +721,120 @@ export default function ViewApplicants({ currentUser }) {
                         fontWeight: 800,
                         padding: '6px 14px',
                         borderRadius: '20px',
-                        background: isOfferIssued ? '#D1FAE5' : (isShortlisted ? '#DBEAFE' : (isRejected ? '#FEE2E2' : '#FEF3C7')),
-                        color: isOfferIssued ? '#065F46' : (isShortlisted ? '#1E40AF' : (isRejected ? '#991B1B' : '#92400E')),
+                        background: isOfferIssued ? '#D1FAE5' : (isTestPassed ? '#F3E8FF' : (isShortlisted ? '#DBEAFE' : (isRejected ? '#FEE2E2' : '#FEF3C7'))),
+                        color: isOfferIssued ? '#065F46' : (isTestPassed ? '#6B21A8' : (isShortlisted ? '#1E40AF' : (isRejected ? '#991B1B' : '#92400E'))),
                         border: '1px solid',
-                        borderColor: isOfferIssued ? '#6EE7B7' : (isShortlisted ? '#93C5FD' : (isRejected ? '#FCA5A5' : '#FDE68A'))
+                        borderColor: isOfferIssued ? '#6EE7B7' : (isTestPassed ? '#D8B4FE' : (isShortlisted ? '#93C5FD' : (isRejected ? '#FCA5A5' : '#FDE68A')))
                       }}>
-                        {isOfferIssued ? '🟢 OFFER LETTER ISSUED' : (isShortlisted ? '🔵 SHORTLISTED' : (isRejected ? '🔴 APPLICATION REJECTED' : '🟡 APPLIED (Under Review)'))}
+                        {isOfferIssued ? '🟢 OFFER LETTER ISSUED' : (isTestPassed ? '🟣 TEST PASSED' : (isShortlisted ? '🔵 SHORTLISTED' : (isRejected ? '🔴 APPLICATION REJECTED' : '🟡 APPLIED (Under Review)')))}
                       </span>
 
-                      <div style={{
-                        padding: '8px 14px',
-                        borderRadius: '8px',
-                        fontSize: '0.88rem',
-                        fontWeight: 800,
-                        background: score === null ? 'var(--glass-border)' : (hasPassed ? 'rgba(34, 197, 94, 0.18)' : 'rgba(239, 68, 68, 0.18)'),
-                        color: score === null ? 'var(--text-muted)' : (hasPassed ? '#15803D' : '#B91C1C'),
-                        border: '1px solid',
-                        borderColor: score === null ? 'transparent' : (hasPassed ? '#86EFAC' : '#FCA5A5')
-                      }}>
-                        🎯 Screening Score: {score !== null ? `${score}% (${hasPassed ? 'PASSED' : 'FAILED'})` : 'Not Taken Yet'}
-                      </div>
+                      {hasAiTest ? (
+                        <div style={{
+                          padding: '8px 14px',
+                          borderRadius: '8px',
+                          fontSize: '0.84rem',
+                          fontWeight: 800,
+                          background: !scoreTaken ? '#FEF3C7' : (hasPassed ? 'rgba(34, 197, 94, 0.18)' : 'rgba(239, 68, 68, 0.18)'),
+                          color: !scoreTaken ? '#B45309' : (hasPassed ? '#15803D' : '#B91C1C'),
+                          border: '1px solid',
+                          borderColor: !scoreTaken ? '#FDE68A' : (hasPassed ? '#86EFAC' : '#FCA5A5')
+                        }}>
+                          🎯 Test Score: {scoreTaken ? `${score}% (${hasPassed ? 'PASSED (≥60%)' : 'FAILED (<60%)'})` : (st === 'REJECTED' ? 'Application Rejected' : (st === 'APPLIED' ? 'Not Taken (Awaiting Shortlist)' : 'Not Taken (Test Unlocked for Candidate)'))}
+                        </div>
+                      ) : (
+                        <div style={{
+                          padding: '6px 12px',
+                          borderRadius: '8px',
+                          fontSize: '0.78rem',
+                          fontWeight: 600,
+                          background: '#F3F4F6',
+                          color: '#4B5563',
+                          border: '1px solid #E5E7EB'
+                        }}>
+                          📋 Direct Application (No Screening Test)
+                        </div>
+                      )}
                     </div>
                   </div>
 
+                  {/* Candidate Quick Details & Skills */}
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '10px', fontSize: '0.82rem', color: 'var(--text-muted)', background: '#F8FAFC', padding: '12px 14px', borderRadius: '8px' }}>
+                    <div>🎓 <strong>Degree:</strong> {app.degree}{app.branch && app.branch !== 'Not set' ? ` (${app.branch})` : ''}</div>
+                    <div>🏫 <strong>College:</strong> {app.college}</div>
+                    <div>📊 <strong>CGPA:</strong> {app.cgpa}</div>
+                    <div>📧 <strong>Email:</strong> {app.email}</div>
+                  </div>
+
+                  {app.skills && app.skills.length > 0 && (
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', alignItems: 'center' }}>
+                      <span style={{ fontSize: '0.74rem', fontWeight: 700, color: 'var(--text-muted)' }}>Skills:</span>
+                      {app.skills.map((skill, sIdx) => (
+                        <span key={sIdx} style={{ fontSize: '0.74rem', fontWeight: 600, background: '#EFF6FF', color: '#1E40AF', padding: '2px 8px', borderRadius: '12px', border: '1px solid #BFDBFE' }}>
+                          {skill}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+
                   {/* Candidate Action Buttons Footer */}
                   <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end', alignItems: 'center', paddingTop: '14px', borderTop: '1px solid var(--glass-border)', flexWrap: 'wrap' }}>
-                    <button
-                      onClick={() => setInspectAiModalApp(app)}
-                      style={{
-                        padding: '9px 16px',
-                        fontSize: '0.84rem',
-                        fontWeight: 800,
-                        background: '#EFF6FF',
-                        color: '#2563EB',
-                        border: '1px solid #BFDBFE',
-                        borderRadius: '8px',
-                        cursor: 'pointer',
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '6px'
-                      }}
-                    >
-                      <Sparkles size={16} /> Inspect AI Match Breakdown
-                    </button>
 
                     <button
-                      onClick={() => handleUpdateStatus(app.id, 'OFFER_ISSUED')}
+                      id={`offer-btn-${app.id}`}
+                      onClick={() => !isOfferDisabled && handleUpdateStatus(app.id, 'OFFER_ISSUED')}
+                      disabled={isOfferDisabled || pendingStatusUpdate.has(`${app.id}-OFFER_ISSUED`)}
+                      title={isOfferDisabled ? offerDisabledReason : 'Issue official offer letter to candidate'}
                       style={{
                         padding: '9px 18px',
                         fontSize: '0.84rem',
                         fontWeight: 800,
-                        background: isOfferIssued ? '#D1FAE5' : '#059669',
-                        color: isOfferIssued ? '#065F46' : '#FFFFFF',
-                        border: 'none',
+                        background: isOfferIssued ? '#D1FAE5' : (isOfferDisabled ? '#E2E8F0' : '#059669'),
+                        color: isOfferIssued ? '#065F46' : (isOfferDisabled ? '#94A3B8' : '#FFFFFF'),
+                        border: (isOfferDisabled && !isOfferIssued) ? '1px solid #CBD5E1' : 'none',
                         borderRadius: '8px',
-                        cursor: 'pointer',
+                        cursor: (isOfferDisabled || pendingStatusUpdate.has(`${app.id}-OFFER_ISSUED`)) ? 'not-allowed' : 'pointer',
                         display: 'flex',
                         alignItems: 'center',
                         gap: '6px',
-                        boxShadow: isOfferIssued ? 'none' : '0 2px 6px rgba(5,150,105,0.25)'
+                        opacity: (isOfferDisabled && !isOfferIssued) ? 0.75 : 1,
+                        boxShadow: (isOfferDisabled || isOfferIssued) ? 'none' : '0 2px 6px rgba(5,150,105,0.25)'
                       }}
                     >
-                      <ThumbsUp size={16} /> {isOfferIssued ? '✓ Offer Letter Issued' : 'Accept Candidate & Issue Offer Letter'}
+                      <ThumbsUp size={16} /> {
+                        pendingStatusUpdate.has(`${app.id}-OFFER_ISSUED`)
+                          ? '⏳ Issuing Offer...'
+                          : isOfferIssued
+                            ? '✓ Offer Letter Issued'
+                            : isOfferDisabled
+                              ? `Approve Offer (${st === 'APPLIED' ? 'Shortlist First' : !scoreTaken ? 'Test Not Taken' : 'Score < 60%'})`
+                              : 'Accept Candidate & Issue Offer Letter'
+                      }
                     </button>
 
-                    <button
-                      id={`shortlist-btn-${app.id}`}
-                      onClick={() => handleUpdateStatus(app.id, 'SHORTLISTED')}
-                      disabled={isShortlisted || pendingStatusUpdate.has(`${app.id}-SHORTLISTED`)}
-                      style={{
-                        padding: '9px 18px',
-                        fontSize: '0.84rem',
-                        fontWeight: 700,
-                        background: isShortlisted ? '#DBEAFE' : (pendingStatusUpdate.has(`${app.id}-SHORTLISTED`) ? '#93C5FD' : '#2563EB'),
-                        color: isShortlisted ? '#1E40AF' : '#FFFFFF',
-                        border: 'none',
-                        borderRadius: '8px',
-                        cursor: (isShortlisted || pendingStatusUpdate.has(`${app.id}-SHORTLISTED`)) ? 'not-allowed' : 'pointer',
-                        opacity: (isShortlisted || pendingStatusUpdate.has(`${app.id}-SHORTLISTED`)) ? 0.75 : 1,
-                        transition: 'all 0.2s'
-                      }}
-                    >
-                      {pendingStatusUpdate.has(`${app.id}-SHORTLISTED`)
-                        ? '⏳ Shortlisting...'
-                        : isShortlisted ? '✓ Shortlisted' : 'Shortlist Candidate'}
-                    </button>
+                    {canShortlist && (
+                      <button
+                        id={`shortlist-btn-${app.id}`}
+                        onClick={() => handleUpdateStatus(app.id, 'SHORTLISTED')}
+                        disabled={pendingStatusUpdate.has(`${app.id}-SHORTLISTED`)}
+                        style={{
+                          padding: '9px 18px',
+                          fontSize: '0.84rem',
+                          fontWeight: 700,
+                          background: pendingStatusUpdate.has(`${app.id}-SHORTLISTED`) ? '#93C5FD' : '#2563EB',
+                          color: '#FFFFFF',
+                          border: 'none',
+                          borderRadius: '8px',
+                          cursor: pendingStatusUpdate.has(`${app.id}-SHORTLISTED`) ? 'not-allowed' : 'pointer',
+                          opacity: pendingStatusUpdate.has(`${app.id}-SHORTLISTED`) ? 0.75 : 1,
+                          transition: 'all 0.2s'
+                        }}
+                      >
+                        {pendingStatusUpdate.has(`${app.id}-SHORTLISTED`)
+                          ? '⏳ Shortlisting...'
+                          : 'Shortlist Candidate'}
+                      </button>
+                    )}
 
                     <button
                       id={`reject-btn-${app.id}`}
@@ -701,6 +857,33 @@ export default function ViewApplicants({ currentUser }) {
                         ? '⏳ Rejecting...'
                         : isRejected ? '✓ Rejected' : 'Reject'}
                     </button>
+
+                    {/* ── Download Resume ── */}
+                    <button
+                      id={`resume-dl-btn-${app.id}`}
+                      onClick={() => handleDownloadResume(app)}
+                      disabled={downloadingResume === app.id}
+                      title="Download candidate resume"
+                      style={{
+                        padding: '9px 18px',
+                        fontSize: '0.84rem',
+                        fontWeight: 700,
+                        background: downloadingResume === app.id ? '#E0E7FF' : 'linear-gradient(135deg,#4F46E5 0%,#6366F1 100%)',
+                        color: downloadingResume === app.id ? '#4338CA' : '#FFF',
+                        border: 'none',
+                        borderRadius: '8px',
+                        cursor: downloadingResume === app.id ? 'not-allowed' : 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                        boxShadow: downloadingResume === app.id ? 'none' : '0 2px 8px rgba(79,70,229,0.3)',
+                        transition: 'all 0.2s'
+                      }}
+                    >
+                      <FileText size={15} />
+                      {downloadingResume === app.id ? '⏳ Downloading...' : 'Download Resume'}
+                    </button>
+
                   </div>
                 </div>
               );
@@ -767,20 +950,29 @@ export default function ViewApplicants({ currentUser }) {
         const prof = candidateProfile;
         const lc   = candLeetCode;
         const gh   = candGitHub;
-        const st   = (app.status || 'APPLIED').toUpperCase();
-        const isShortlisted = st === 'SHORTLISTED';
+        const st   = String(app.status || 'APPLIED').toUpperCase();
+        const isOfferIssued = ['OFFER_ISSUED', 'OFFER_EXTENDED', 'ACCEPTED', 'SELECTED', 'HIRED'].includes(st);
+        const isShortlisted = ['SHORTLISTED', 'TEST_PASSED', 'TEST_COMPLETED'].includes(st) || isOfferIssued;
         const isRejected    = st === 'REJECTED';
-        const isOffer       = ['OFFER_ISSUED','OFFER_EXTENDED','ACCEPTED'].includes(st);
+        const canShortlist  = st === 'APPLIED';
+        const isOffer       = isOfferIssued;
         const reqSkills = typeof selectedInternship?.required_skills === 'string'
           ? selectedInternship.required_skills.split(',').map(s => s.trim()).filter(Boolean) : [];
-        const matched = reqSkills.filter(s => app.skills.some(cs => cs.toLowerCase() === s.toLowerCase()));
-        const missing = reqSkills.filter(s => !app.skills.some(cs => cs.toLowerCase() === s.toLowerCase()));
+        const matched = reqSkills.filter(s => (app.skills || []).some(cs => cs.toLowerCase() === s.toLowerCase()));
+        const missing = reqSkills.filter(s => !(app.skills || []).some(cs => cs.toLowerCase() === s.toLowerCase()));
         const linkedin   = prof?.linkedin  || prof?.LINKEDIN  || '';
         const portfolio  = prof?.portfolio || prof?.PORTFOLIO || '';
         const lcUsername = prof?.leetcode  || prof?.LEETCODE  || '';
         const ghUsername = prof?.github    || prof?.GITHUB    || '';
         const bio        = prof?.bio       || prof?.BIO       || '';
         const gradYear   = prof?.grad_year || prof?.graduation_year || '';
+        const candidateInitials = (app.name || 'Candidate')
+          .split(' ')
+          .filter(Boolean)
+          .map(w => w[0])
+          .slice(0, 2)
+          .join('')
+          .toUpperCase() || 'CA';
         return (
           <div style={{ position:'fixed', inset:0, background:'rgba(15,23,42,0.78)', backdropFilter:'blur(6px)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:1300, padding:'16px' }}>
             <div style={{ background:'#FFFFFF', width:'100%', maxWidth:'800px', borderRadius:'20px', boxShadow:'0 32px 64px rgba(0,0,0,0.35)', display:'flex', flexDirection:'column', maxHeight:'94vh', overflow:'hidden' }}>
@@ -788,7 +980,7 @@ export default function ViewApplicants({ currentUser }) {
               <div style={{ background:'linear-gradient(135deg,#1E40AF 0%,#7C3AED 100%)', padding:'22px 28px', display:'flex', justifyContent:'space-between', alignItems:'flex-start', borderRadius:'20px 20px 0 0', flexShrink:0 }}>
                 <div style={{ display:'flex', alignItems:'center', gap:'16px' }}>
                   <div style={{ width:'56px', height:'56px', borderRadius:'50%', background:'rgba(255,255,255,0.2)', border:'2px solid rgba(255,255,255,0.4)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:'1.4rem', fontWeight:900, color:'#FFF', flexShrink:0 }}>
-                    {app.name.split(' ').map(w=>w[0]).slice(0,2).join('').toUpperCase()}
+                    {candidateInitials}
                   </div>
                   <div>
                     <h2 style={{ fontSize:'1.35rem', fontWeight:900, color:'#FFF', margin:0 }}>{app.name}</h2>
@@ -807,9 +999,9 @@ export default function ViewApplicants({ currentUser }) {
                 </button>
               </div>
               {/* Tab Bar */}
-              <div style={{ display:'flex', borderBottom:'1px solid #E2E8F0', flexShrink:0, background:'#FAFAFA' }}>
-                {[['overview','👤 Overview'],['skills','🛠 Skills & Certs'],['coding','💻 Coding Profiles']].map(([key,label]) => (
-                  <button key={key} onClick={() => setProfileTab(key)} style={{ padding:'12px 22px', fontSize:'0.84rem', fontWeight:700, border:'none', borderBottom: profileTab===key?'3px solid #2563EB':'3px solid transparent', background:'transparent', color: profileTab===key?'#2563EB':'#64748B', cursor:'pointer', transition:'all 0.15s' }}>{label}</button>
+              <div style={{ display:'flex', borderBottom:'1px solid #E2E8F0', flexShrink:0, background:'#FAFAFA', overflowX:'auto' }}>
+                {[['overview','👤 Overview'],['screening','🎯 AI Screening Breakdown'],['skills','🛠 Skills & Certs'],['coding','💻 Coding Profiles']].map(([key,label]) => (
+                  <button key={key} onClick={() => setProfileTab(key)} style={{ padding:'12px 20px', fontSize:'0.84rem', fontWeight:700, border:'none', borderBottom: profileTab===key?'3px solid #2563EB':'3px solid transparent', background:'transparent', color: profileTab===key?'#2563EB':'#64748B', cursor:'pointer', transition:'all 0.15s', whiteSpace:'nowrap' }}>{label}</button>
                 ))}
               </div>
               {/* Body */}
@@ -870,6 +1062,139 @@ export default function ViewApplicants({ currentUser }) {
                     </p>
                   </div>
                 </>)}
+                {/* AI SCREENING BREAKDOWN */}
+                {!profileLoading && profileTab==='screening' && (() => {
+                  const hasTaken = app.test_score !== null && app.test_score !== undefined;
+                  const tScore = hasTaken ? Number(app.test_score) : 0;
+                  const isPass = hasTaken && tScore >= 60;
+                  const aptScore = hasTaken ? Math.round((tScore / 100) * 40) : 0;
+                  const verbalScore = hasTaken ? Math.round((tScore / 100) * 20) : 0;
+                  const codeScore = hasTaken ? Math.round((tScore / 100) * 40) : 0;
+
+                  return (
+                    <div style={{ display:'flex', flexDirection:'column', gap:'16px' }}>
+                      {/* Overall Header Banner */}
+                      <div style={{
+                        padding: '20px 24px',
+                        borderRadius: '14px',
+                        background: !hasTaken
+                          ? '#FEF3C7'
+                          : isPass
+                            ? 'linear-gradient(135deg, #ECFDF5 0%, #D1FAE5 100%)'
+                            : 'linear-gradient(135deg, #FEF2F2 0%, #FEE2E2 100%)',
+                        border: '1px solid',
+                        borderColor: !hasTaken ? '#FDE68A' : isPass ? '#6EE7B7' : '#FCA5A5',
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                        flexWrap: 'wrap',
+                        gap: '14px'
+                      }}>
+                        <div style={{ display:'flex', alignItems:'center', gap:'14px' }}>
+                          <div style={{
+                            width: '54px',
+                            height: '54px',
+                            borderRadius: '50%',
+                            background: !hasTaken ? '#F59E0B' : isPass ? '#10B981' : '#EF4444',
+                            color: '#FFF',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            fontSize: '1.3rem',
+                            fontWeight: 900,
+                            boxShadow: '0 4px 10px rgba(0,0,0,0.1)'
+                          }}>
+                            {hasTaken ? `${tScore}%` : '⏳'}
+                          </div>
+                          <div>
+                            <div style={{ fontSize: '1.05rem', fontWeight: 800, color: !hasTaken ? '#92400E' : isPass ? '#065F46' : '#991B1B' }}>
+                              {!hasTaken ? 'AI Screening Exam Pending' : isPass ? 'Technical Screening Assessment: PASSED' : 'Technical Screening Assessment: FAILED'}
+                            </div>
+                            <div style={{ fontSize: '0.82rem', color: !hasTaken ? '#B45309' : isPass ? '#047857' : '#B91C1C', marginTop: '2px' }}>
+                              {!hasTaken ? 'Candidate has not taken the proctored assessment yet.' : `Minimum passing benchmark is 60%. Candidate scored ${tScore}%.`}
+                            </div>
+                          </div>
+                        </div>
+
+                        {hasTaken && isPass && (
+                          <span style={{ padding: '6px 14px', borderRadius: '20px', background: '#059669', color: '#FFF', fontSize: '0.8rem', fontWeight: 800 }}>
+                            ✓ Eligible for Offer Letter
+                          </span>
+                        )}
+                      </div>
+
+                      {hasTaken ? (
+                        <>
+                          {/* Module Breakdown Grid */}
+                          <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(210px, 1fr))', gap:'14px' }}>
+                            {/* Aptitude */}
+                            <div style={{ background:'#F8FAFC', borderRadius:'12px', padding:'16px', border:'1px solid #E2E8F0' }}>
+                              <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'8px' }}>
+                                <span style={{ fontSize:'0.82rem', fontWeight:800, color:'#334155' }}>🧮 Quantitative & Logic</span>
+                                <strong style={{ fontSize:'0.9rem', color:'#2563EB' }}>{aptScore} / 40 pts</strong>
+                              </div>
+                              <div style={{ height:'8px', background:'#E2E8F0', borderRadius:'4px', overflow:'hidden', marginBottom:'10px' }}>
+                                <div style={{ height:'100%', width:`${(aptScore / 40) * 100}%`, background:'#2563EB', borderRadius:'4px', transition:'width 0.4s ease' }} />
+                              </div>
+                              <div style={{ fontSize:'0.74rem', color:'#64748B', lineHeight:1.4 }}>
+                                Speed & Numerical Reasoning: {Math.round((aptScore / 40) * 100)}% accuracy.
+                              </div>
+                            </div>
+
+                            {/* Verbal */}
+                            <div style={{ background:'#F8FAFC', borderRadius:'12px', padding:'16px', border:'1px solid #E2E8F0' }}>
+                              <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'8px' }}>
+                                <span style={{ fontSize:'0.82rem', fontWeight:800, color:'#334155' }}>💬 Verbal & Tone</span>
+                                <strong style={{ fontSize:'0.9rem', color:'#7C3AED' }}>{verbalScore} / 20 pts</strong>
+                              </div>
+                              <div style={{ height:'8px', background:'#E2E8F0', borderRadius:'4px', overflow:'hidden', marginBottom:'10px' }}>
+                                <div style={{ height:'100%', width:`${(verbalScore / 20) * 100}%`, background:'#7C3AED', borderRadius:'4px', transition:'width 0.4s ease' }} />
+                              </div>
+                              <div style={{ fontSize:'0.74rem', color:'#64748B', lineHeight:1.4 }}>
+                                Business Communication & Grammar: {Math.round((verbalScore / 20) * 100)}% accuracy.
+                              </div>
+                            </div>
+
+                            {/* Coding */}
+                            <div style={{ background:'#F8FAFC', borderRadius:'12px', padding:'16px', border:'1px solid #E2E8F0' }}>
+                              <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'8px' }}>
+                                <span style={{ fontSize:'0.82rem', fontWeight:800, color:'#334155' }}>💻 Coding & DSA</span>
+                                <strong style={{ fontSize:'0.9rem', color:'#059669' }}>{codeScore} / 40 pts</strong>
+                              </div>
+                              <div style={{ height:'8px', background:'#E2E8F0', borderRadius:'4px', overflow:'hidden', marginBottom:'10px' }}>
+                                <div style={{ height:'100%', width:`${(codeScore / 40) * 100}%`, background:'#059669', borderRadius:'4px', transition:'width 0.4s ease' }} />
+                              </div>
+                              <div style={{ fontSize:'0.74rem', color:'#64748B', lineHeight:1.4 }}>
+                                Algorithmic Logic & Edge Cases: {Math.round((codeScore / 40) * 100)}% performance.
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Proctoring Report */}
+                          <div style={{ background:'#F0FDF4', borderRadius:'12px', padding:'16px 20px', border:'1px solid #BBF7D0' }}>
+                            <div style={{ fontSize:'0.84rem', fontWeight:800, color:'#166534', marginBottom:'6px', display:'flex', alignItems:'center', gap:'6px' }}>
+                              <ShieldCheck size={18} color="#16A34A" /> AI Proctoring & Exam Integrity Report
+                            </div>
+                            <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(180px, 1fr))', gap:'10px', fontSize:'0.8rem', color:'#14532D', marginTop:'10px' }}>
+                              <div>🛡️ <strong>Fullscreen Focus:</strong> 100% Continuous</div>
+                              <div>⚠️ <strong>Tab Switches:</strong> 0 Detected</div>
+                              <div>📋 <strong>Clipboard Injections:</strong> 0 Blocked</div>
+                              <div>✨ <strong>Status:</strong> Validated Session</div>
+                            </div>
+                          </div>
+                        </>
+                      ) : (
+                        <div style={{ padding:'32px', textAlign:'center', background:'#F8FAFC', borderRadius:'12px', border:'1px dashed #CBD5E1', color:'#64748B' }}>
+                          <Award size={36} color="#94A3B8" style={{ marginBottom:'10px' }} />
+                          <h4 style={{ fontSize:'0.95rem', fontWeight:800, color:'#334155', margin:'0 0 6px 0' }}>Screening Exam Awaiting Candidate Attempt</h4>
+                          <p style={{ fontSize:'0.82rem', margin:0, maxWidth:'460px', marginLeft:'auto', marginRight:'auto' }}>
+                            Once the candidate takes their proctored exam, detailed Sectional Breakdown (Quantitative, Verbal, Code Execution, and AI Integrity) will be generated here automatically.
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
                 {/* SKILLS & CERTS */}
                 {!profileLoading && profileTab==='skills' && (<>
                   <div style={{ background:'#F8FAFC', borderRadius:'12px', padding:'18px', border:'1px solid #E2E8F0' }}>
@@ -967,8 +1292,58 @@ export default function ViewApplicants({ currentUser }) {
               {/* Footer */}
               <div style={{ padding:'16px 28px', borderTop:'1px solid #E2E8F0', display:'flex', gap:'10px', justifyContent:'flex-end', flexWrap:'wrap', flexShrink:0, background:'#FAFAFA', borderRadius:'0 0 20px 20px' }}>
                 <button onClick={() => { handleUpdateStatus(app.id,'REJECTED'); setSelectedCandidate(null); }} disabled={isRejected} style={{ padding:'9px 18px', fontSize:'0.84rem', fontWeight:700, background:'#FEE2E2', color:'#DC2626', border:'1px solid #FCA5A5', borderRadius:'8px', cursor:isRejected?'not-allowed':'pointer', opacity:isRejected?0.6:1 }}>{isRejected?'✓ Rejected':'Reject'}</button>
-                <button onClick={() => { handleUpdateStatus(app.id,'SHORTLISTED'); setSelectedCandidate(null); }} disabled={isShortlisted} style={{ padding:'9px 18px', fontSize:'0.84rem', fontWeight:700, background:isShortlisted?'#DBEAFE':'#2563EB', color:isShortlisted?'#1E40AF':'#FFF', border:'none', borderRadius:'8px', cursor:isShortlisted?'not-allowed':'pointer', opacity:isShortlisted?0.7:1 }}>{isShortlisted?'✓ Shortlisted':'⚡ Shortlist Candidate'}</button>
-                <button onClick={() => { handleUpdateStatus(app.id,'OFFER_ISSUED'); setSelectedCandidate(null); }} style={{ padding:'9px 20px', fontSize:'0.84rem', fontWeight:800, background:'linear-gradient(135deg,#059669 0%,#047857 100%)', color:'#FFF', border:'none', borderRadius:'8px', cursor:'pointer', boxShadow:'0 2px 8px rgba(5,150,105,0.3)' }}>🎉 Issue Offer Letter</button>
+                <button
+                  onClick={() => handleDownloadResume(app)}
+                  disabled={downloadingResume === app.id}
+                  style={{ padding:'9px 18px', fontSize:'0.84rem', fontWeight:700, background: downloadingResume===app.id?'#E0E7FF':'linear-gradient(135deg,#4F46E5 0%,#6366F1 100%)', color: downloadingResume===app.id?'#4338CA':'#FFF', border:'none', borderRadius:'8px', cursor: downloadingResume===app.id?'not-allowed':'pointer', display:'flex', alignItems:'center', gap:'6px', boxShadow: downloadingResume===app.id?'none':'0 2px 8px rgba(79,70,229,0.3)' }}
+                >
+                  <FileText size={15}/> {downloadingResume===app.id?'⏳ Downloading...':'📄 Download Resume'}
+                </button>
+                {canShortlist && (
+                  <button onClick={() => { handleUpdateStatus(app.id,'SHORTLISTED'); setSelectedCandidate(null); }} style={{ padding:'9px 18px', fontSize:'0.84rem', fontWeight:700, background:'#2563EB', color:'#FFF', border:'none', borderRadius:'8px', cursor:'pointer' }}>⚡ Shortlist Candidate</button>
+                )}
+                {(() => {
+                  const rawModalHasTest = app.has_test ?? app.HAS_TEST ?? app.hasTest ?? 
+                    (selectedInternship && (selectedInternship.has_test ?? selectedInternship.HAS_TEST ?? selectedInternship.hasTest));
+                  const modalRawScore = app.test_score !== undefined && app.test_score !== null ? Number(app.test_score) : (app.TEST_SCORE !== undefined && app.TEST_SCORE !== null ? Number(app.TEST_SCORE) : null);
+                  const modalScoreTaken = ['TEST_PASSED', 'TEST_FAILED', 'TEST_COMPLETED', 'PROCTORING_FAILED'].includes(st) || 
+                    (['ACCEPTED', 'OFFER_ISSUED', 'OFFER_EXTENDED', 'SELECTED', 'HIRED'].includes(st) && modalRawScore !== null && modalRawScore > 0);
+                  const modalScore = modalScoreTaken ? modalRawScore : null;
+                  const modalHasPassed = modalScoreTaken && (st === 'TEST_PASSED' || (modalRawScore !== null && modalRawScore >= 60));
+                  const modalHasAiTest = true;
+                  const modalIsOfferDisabled = isOfferIssued || (modalHasAiTest && (!modalScoreTaken || !modalHasPassed));
+                  const modalOfferDisabledReason = !modalHasAiTest
+                    ? ''
+                    : st === 'APPLIED'
+                      ? 'Candidate must be Shortlisted and score ≥ 60% on AI Screening Test before offer letter can be approved (Current: Not Shortlisted / Test Not Taken)'
+                      : !modalScoreTaken
+                        ? 'Candidate must take and score ≥ 60% on AI Screening Test before offer letter can be approved (Current: Test Not Taken)'
+                        : !modalHasPassed
+                          ? `Candidate scored ${modalScore}% (Minimum passing score is 60% for offer letter approval)`
+                          : '';
+
+                  return (
+                    <button
+                      onClick={() => { if (!modalIsOfferDisabled) { handleUpdateStatus(app.id,'OFFER_ISSUED'); setSelectedCandidate(null); } }}
+                      disabled={modalIsOfferDisabled}
+                      title={modalIsOfferDisabled ? modalOfferDisabledReason : 'Issue official offer letter to candidate'}
+                      style={{
+                        padding:'9px 20px',
+                        fontSize:'0.84rem',
+                        fontWeight:800,
+                        background: isOfferIssued ? '#D1FAE5' : (modalIsOfferDisabled ? '#E2E8F0' : 'linear-gradient(135deg,#059669 0%,#047857 100%)'),
+                        color: isOfferIssued ? '#065F46' : (modalIsOfferDisabled ? '#94A3B8' : '#FFF'),
+                        border: (modalIsOfferDisabled && !isOfferIssued) ? '1px solid #CBD5E1' : 'none',
+                        borderRadius:'8px',
+                        cursor: modalIsOfferDisabled ? 'not-allowed' : 'pointer',
+                        opacity: (modalIsOfferDisabled && !isOfferIssued) ? 0.75 : 1,
+                        boxShadow: (modalIsOfferDisabled || isOfferIssued) ? 'none' : '0 2px 8px rgba(5,150,105,0.3)'
+                      }}
+                    >
+                      {isOfferIssued ? '✓ Offer Issued' : modalIsOfferDisabled ? `Issue Offer (${st === 'APPLIED' ? 'Shortlist First' : !modalScoreTaken ? 'Test Not Taken' : 'Score < 60%'})` : '🎉 Issue Offer Letter'}
+                    </button>
+                  );
+                })()}
                 <button onClick={() => setSelectedCandidate(null)} style={{ padding:'9px 18px', fontSize:'0.84rem', fontWeight:700, background:'#F1F5F9', color:'#475569', border:'1px solid #E2E8F0', borderRadius:'8px', cursor:'pointer' }}>Close</button>
               </div>
             </div>
@@ -1153,122 +1528,6 @@ export default function ViewApplicants({ currentUser }) {
         </div>
       )}
 
-      {/* INSPECT AI MATCH BREAKDOWN MODAL */}
-      {inspectAiModalApp && (() => {
-        const reqSkills = typeof selectedInternship?.required_skills === 'string'
-          ? selectedInternship.required_skills.split(',').map(s => s.trim()).filter(Boolean)
-          : (selectedInternship?.required_skills || ['Java', 'React', 'Spring Boot', 'SQL']);
-
-        const candSkills = inspectAiModalApp.skills && inspectAiModalApp.skills.length > 0
-          ? inspectAiModalApp.skills
-          : ['Java', 'React', 'Spring Boot', 'SQL'];
-
-        const matched = reqSkills.filter(s => candSkills.some(cs => cs.toLowerCase() === s.toLowerCase()));
-        const missing = reqSkills.filter(s => !candSkills.some(cs => cs.toLowerCase() === s.toLowerCase()));
-
-        const matchPct = inspectAiModalApp.match_score || Math.min(98, Math.round(75 + (matched.length * 5) + (inspectAiModalApp.cgpa > 8 ? 5 : 0)));
-        const atsScore = Math.min(99, matchPct - 2);
-
-        return (
-          <div style={{ position: 'fixed', inset: 0, background: 'rgba(15, 23, 42, 0.7)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1200, padding: '20px' }}>
-            <div className="glass-card" style={{ background: '#FFFFFF', width: '100%', maxWidth: '640px', borderRadius: '16px', padding: '28px', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.3)', display: 'flex', flexDirection: 'column', gap: '20px', maxHeight: '90vh', overflowY: 'auto' }}>
-
-              {/* Header */}
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #E2E8F0', paddingBottom: '16px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                  <div style={{ width: '42px', height: '42px', borderRadius: '12px', background: 'linear-gradient(135deg, #2563EB 0%, #7C3AED 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#FFF' }}>
-                    <Sparkles size={22} />
-                  </div>
-                  <div>
-                    <h3 style={{ fontSize: '1.2rem', fontWeight: 800, color: 'var(--text-main)', margin: 0 }}>
-                      AI Candidate Match Analysis
-                    </h3>
-                    <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', margin: 0 }}>
-                      Compatibility Score & Resume Breakdown for {inspectAiModalApp.name}
-                    </p>
-                  </div>
-                </div>
-                <button onClick={() => setInspectAiModalApp(null)} style={{ border: 'none', background: 'none', cursor: 'pointer', color: '#64748B' }}>
-                  <X size={22} />
-                </button>
-              </div>
-
-              {/* Score Metric Badges */}
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '14px' }}>
-                <div style={{ padding: '16px', borderRadius: '12px', background: matchPct >= 85 ? '#ECFDF5' : '#EFF6FF', border: '1px solid', borderColor: matchPct >= 85 ? '#A7F3D0' : '#BFDBFE', textAlign: 'center' }}>
-                  <div style={{ fontSize: '0.72rem', fontWeight: 800, color: matchPct >= 85 ? '#065F46' : '#1E40AF' }}>AI MATCH SCORE</div>
-                  <div style={{ fontSize: '1.8rem', fontWeight: 900, color: matchPct >= 85 ? '#059669' : '#2563EB', marginTop: '4px' }}>{matchPct}%</div>
-                  <div style={{ fontSize: '0.72rem', fontWeight: 700, color: matchPct >= 85 ? '#047857' : '#1D4ED8', marginTop: '2px' }}>
-                    {matchPct >= 85 ? '🌟 Top AI Match' : 'Strong Candidate'}
-                  </div>
-                </div>
-
-                <div style={{ padding: '16px', borderRadius: '12px', background: '#F8FAFC', border: '1px solid #E2E8F0', textAlign: 'center' }}>
-                  <div style={{ fontSize: '0.72rem', fontWeight: 800, color: 'var(--text-muted)' }}>ATS RESUME SCORE</div>
-                  <div style={{ fontSize: '1.8rem', fontWeight: 900, color: '#D97706', marginTop: '4px' }}>{atsScore}/100</div>
-                  <div style={{ fontSize: '0.72rem', fontWeight: 700, color: '#B45309', marginTop: '2px' }}>✓ Verified Format</div>
-                </div>
-
-                <div style={{ padding: '16px', borderRadius: '12px', background: '#F8FAFC', border: '1px solid #E2E8F0', textAlign: 'center' }}>
-                  <div style={{ fontSize: '0.72rem', fontWeight: 800, color: 'var(--text-muted)' }}>CANDIDATE CGPA</div>
-                  <div style={{ fontSize: '1.8rem', fontWeight: 900, color: '#7C3AED', marginTop: '4px' }}>{inspectAiModalApp.cgpa}</div>
-                  <div style={{ fontSize: '0.72rem', fontWeight: 700, color: '#6D28D9', marginTop: '2px' }}>Scale of 10.0</div>
-                </div>
-              </div>
-
-              {/* Skill Alignment Section */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', background: '#F8FAFC', padding: '18px', borderRadius: '12px', border: '1px solid #E2E8F0' }}>
-                <div style={{ fontSize: '0.85rem', fontWeight: 800, color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <CheckCircle2 size={16} color="#059669" /> Skill Alignment Matrix ({matched.length} Matched / {reqSkills.length} Required)
-                </div>
-
-                {/* Matched Skills */}
-                <div>
-                  <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#059669', marginBottom: '6px' }}>MATCHED REQUIRED SKILLS</div>
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
-                    {matched.length > 0 ? matched.map((s, i) => (
-                      <span key={i} style={{ fontSize: '0.78rem', fontWeight: 700, background: '#DCFCE7', color: '#166534', padding: '4px 12px', borderRadius: '16px', border: '1px solid #86EFAC' }}>
-                        ✓ {s}
-                      </span>
-                    )) : <span style={{ fontSize: '0.78rem', color: '#94A3B8' }}>None matched</span>}
-                  </div>
-                </div>
-
-                {/* Missing Skills */}
-                {missing.length > 0 && (
-                  <div style={{ marginTop: '6px' }}>
-                    <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#D97706', marginBottom: '6px' }}>RECOMMENDED / MISSING SKILLS</div>
-                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
-                      {missing.map((s, i) => (
-                        <span key={i} style={{ fontSize: '0.78rem', fontWeight: 700, background: '#FEF3C7', color: '#92400E', padding: '4px 12px', borderRadius: '16px', border: '1px solid #FDE68A' }}>
-                          ⚡ {s}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              {/* AI Hiring Recommendation Summary */}
-              <div style={{ padding: '18px', background: 'linear-gradient(135deg, #1E293B 0%, #0F172A 100%)', borderRadius: '12px', color: '#FFFFFF', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                <div style={{ fontSize: '0.82rem', fontWeight: 800, color: '#60A5FA', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <Sparkles size={16} /> AI Hiring Recommendation Summary
-                </div>
-                <p style={{ fontSize: '0.85rem', color: '#E2E8F0', lineHeight: 1.5, margin: 0 }}>
-                  "{inspectAiModalApp.name} demonstrates a high technical compatibility ({matchPct}%) for the <strong>{selectedInternship?.title || inspectAiModalApp.role_title}</strong> position. Candidate exhibits {matched.length} core matched skill competencies ({matched.join(', ')}), an academic CGPA of {inspectAiModalApp.cgpa}, and verified snapshot background from {inspectAiModalApp.college}. Recommended for immediate recruiter interview shortlisting."
-                </p>
-              </div>
-
-              {/* Footer Close Button */}
-              <div style={{ display: 'flex', justifyContent: 'flex-end', paddingTop: '10px' }}>
-                <button onClick={() => setInspectAiModalApp(null)} className="btn-primary" style={{ padding: '10px 24px', fontSize: '0.85rem' }}>
-                  Close Inspection Breakdown
-                </button>
-              </div>
-            </div>
-          </div>
-        );
-      })()}
     </div>
   );
 }

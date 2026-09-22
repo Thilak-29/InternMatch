@@ -71,7 +71,34 @@ export default function StudentApplications({ currentUser }) {
 
       if (res.ok) {
         const data = await res.json();
-        setApplications(Array.isArray(data) ? data : []);
+        const rawList = Array.isArray(data) ? data : [];
+        const dedupedMap = new Map();
+        const priorityStatuses = ['SHORTLISTED', 'ACCEPTED_FOR_TEST', 'TEST_PASSED', 'TEST_FAILED', 'OFFER_EXTENDED', 'OFFER_ISSUED', 'ACCEPTED', 'PROCTORING_FAILED'];
+        rawList.forEach(app => {
+          const key = app.internship_id || app.INTERNSHIP_ID || app.external_id || app.EXTERNAL_ID || app.id;
+          if (!dedupedMap.has(key)) {
+            dedupedMap.set(key, app);
+          } else {
+            const prev = dedupedMap.get(key);
+            const prevStatus = (prev.status || prev.STATUS || '').toUpperCase();
+            const currStatus = (app.status || app.STATUS || '').toUpperCase();
+            const prevScore = Number(prev.test_score || prev.TEST_SCORE || 0);
+            const currScore = Number(app.test_score || app.TEST_SCORE || 0);
+            
+            if (priorityStatuses.includes(currStatus) && !priorityStatuses.includes(prevStatus)) {
+              dedupedMap.set(key, app);
+            } else if (currScore > 0 && prevScore === 0) {
+              dedupedMap.set(key, app);
+            } else if (!priorityStatuses.includes(prevStatus)) {
+              const prevId = Number(prev.id || prev.ID || 0);
+              const currId = Number(app.id || app.ID || 0);
+              if (currId > prevId) {
+                dedupedMap.set(key, app);
+              }
+            }
+          }
+        });
+        setApplications(Array.from(dedupedMap.values()));
       } else {
         setApplications([]);
       }
@@ -86,6 +113,24 @@ export default function StudentApplications({ currentUser }) {
   const handleTestSubmit = async (score) => {
     if (!testModalApp) return;
     const appId = testModalApp.id || testModalApp.application_id;
+    const numScore = Number(score);
+    const passedStatus = numScore >= 60 ? 'TEST_PASSED' : 'TEST_FAILED';
+
+    // Optimistically update local application state so UI updates instantly to the taken score
+    setApplications(prev => prev.map(a => {
+      const aId = a.id || a.application_id;
+      if (aId === appId) {
+        return {
+          ...a,
+          test_score: numScore,
+          TEST_SCORE: numScore,
+          status: passedStatus,
+          STATUS: passedStatus,
+          test_submitted: true
+        };
+      }
+      return a;
+    }));
 
     try {
       await fetch(`${baseUrl}/api/v1/student/applications/${appId}/test-score`, {
@@ -94,9 +139,9 @@ export default function StudentApplications({ currentUser }) {
           'Content-Type': 'application/json',
           'Authorization': token
         },
-        body: JSON.stringify({ score })
+        body: JSON.stringify({ score: numScore })
       });
-      setStatusMsg(`✓ Test completed! Score: ${score}% recorded cleanly in Oracle Database.`);
+      setStatusMsg(`✓ Test completed! Score: ${numScore}% (${numScore >= 60 ? 'PASSED' : 'FAILED'}) recorded successfully.`);
       fetchApplications();
     } catch (e) {
       console.error("Test score submission error:", e);
@@ -178,6 +223,10 @@ export default function StudentApplications({ currentUser }) {
   };
 
   const handleDeleteApp = (appId) => {
+    // find the app so we can pass internship_id to company-service
+    const appObj = applications.find(a => (a.id || a.application_id) === appId);
+    const internshipId = appObj?.internship_id || appObj?.INTERNSHIP_ID || 0;
+
     setConfirmModal({
       isOpen: true,
       title: 'Withdraw & Cancel Application',
@@ -187,13 +236,20 @@ export default function StudentApplications({ currentUser }) {
         try {
           const res = await fetch(`${baseUrl}/api/v1/student/applications/${appId}`, {
             method: 'DELETE',
-            headers: {
-              'Authorization': token
-            }
+            headers: { 'Authorization': token }
           });
           if (res.ok) {
             setStatusMsg('✓ Application withdrawn successfully.');
             setApplications(prev => prev.filter(a => (a.id || a.application_id) !== appId));
+
+            // Sync withdrawal to company-service so recruiter dashboard reflects this immediately
+            try {
+              await fetch(`${API_CONFIG.COMPANY_SERVICE_URL}/api/v1/company/applications/withdraw`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': token },
+                body: JSON.stringify({ student_id: studentId, internship_id: internshipId })
+              });
+            } catch (_) { /* non-fatal — company-service may be down */ }
           } else {
             setStatusMsg('❌ Failed to withdraw application.');
           }
@@ -205,6 +261,26 @@ export default function StudentApplications({ currentUser }) {
       }
     });
   };
+
+  const ITEMS_PER_PAGE = 7;
+  const [currentPage, setCurrentPage] = useState(1);
+
+  const totalPages = Math.ceil(applications.length / ITEMS_PER_PAGE);
+
+  useEffect(() => {
+    if (applications.length > 0) {
+      const maxPages = Math.ceil(applications.length / ITEMS_PER_PAGE);
+      if (currentPage > maxPages) {
+        setCurrentPage(maxPages);
+      }
+    } else {
+      setCurrentPage(1);
+    }
+  }, [applications.length, currentPage]);
+
+  const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
+  const endIndex = startIndex + ITEMS_PER_PAGE;
+  const currentApplications = applications.slice(startIndex, endIndex);
 
   if (isLoading) {
     return (
@@ -226,9 +302,16 @@ export default function StudentApplications({ currentUser }) {
           </p>
         </div>
 
-        <span className="badge badge-auth" style={{ fontSize: '0.8rem', padding: '6px 12px' }}>
-          Total Submitted: {applications.length}
-        </span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          {applications.length > ITEMS_PER_PAGE && (
+            <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)', fontWeight: 600 }}>
+              Showing {startIndex + 1}–{Math.min(endIndex, applications.length)} of {applications.length}
+            </span>
+          )}
+          <span className="badge badge-auth" style={{ fontSize: '0.8rem', padding: '6px 12px' }}>
+            Total Submitted: {applications.length}
+          </span>
+        </div>
       </div>
 
       {statusMsg && (
@@ -245,22 +328,38 @@ export default function StudentApplications({ currentUser }) {
       )}
 
       {applications.length > 0 ? (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-          {applications.map((app, idx) => {
+        <>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+          {currentApplications.map((app, idx) => {
             const isUnstop = (app.source || app.SOURCE || '').toUpperCase() === 'UNSTOP';
             const status = (app.status || (isUnstop ? 'APPLIED_EXTERNALLY' : 'APPLIED')).toUpperCase();
-            const score = app.test_score !== undefined && app.test_score !== null ? app.test_score : (app.TEST_SCORE !== undefined ? app.TEST_SCORE : null);
+            const rawScore = app.test_score !== undefined && app.test_score !== null ? Number(app.test_score) : (app.TEST_SCORE !== undefined && app.TEST_SCORE !== null ? Number(app.TEST_SCORE) : null);
+            // All internal platform applications (non-Unstop) use AI screening test
+            const hasAiTest = !isUnstop;
+            const isTestSubmitted = ['TEST_PASSED', 'TEST_FAILED', 'TEST_COMPLETED', 'PROCTORING_FAILED', 'OFFER_ISSUED', 'OFFER_EXTENDED', 'ACCEPTED', 'SELECTED', 'HIRED', 'REJECTED'].includes(status) || 
+              app.test_submitted === true ||
+              (rawScore !== null && rawScore !== undefined && rawScore > 0);
+            const score = rawScore !== null ? rawScore : (status === 'TEST_PASSED' ? 80 : (status === 'TEST_FAILED' ? 40 : null));
             const isOfferExtended = status === 'OFFER_EXTENDED' || status === 'OFFER_ISSUED' || status === 'ACCEPTED';
-            // Quiz is only accessible after recruiter explicitly shortlists the student.
-            // APPLIED / IN_REVIEW / etc. are NOT eligible — only SHORTLISTED or ACCEPTED_FOR_TEST.
+            const deadlineStr = app.application_deadline || app.deadline || app.APPLICATION_DEADLINE || '';
+            const isDeadlinePassed = deadlineStr ? (new Date() > new Date(deadlineStr)) : false;
+
+            // Quiz is accessible ONLY when:
+            // 1. Not unstop
+            // 2. Internship has AI test (hasAiTest === true)
+            // 3. Recruiter has SHORTLISTED the candidate (status === 'SHORTLISTED' || status === 'ACCEPTED_FOR_TEST')
+            // 4. Test has not yet been submitted
+            // 5. Not proctoring failed
+            const isShortlistedForTest = (status === 'SHORTLISTED' || status === 'ACCEPTED_FOR_TEST');
             const canTakeTest = !isUnstop
-              && (status === 'SHORTLISTED' || status === 'ACCEPTED_FOR_TEST')
-              && (score === null || score === 0 || score === undefined)
+              && hasAiTest
+              && isShortlistedForTest
+              && !isTestSubmitted
               && status !== 'PROCTORING_FAILED';
             const appUrl = app.application_url || app.APPLICATION_URL || '';
 
             return (
-              <div key={idx} className="glass-card" style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '16px', borderLeft: isUnstop ? '4px solid #7C3AED' : '4px solid #2563EB' }}>
+              <div key={idx} className="glass-card" style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '16px', borderLeft: isUnstop ? '4px solid #7C3AED' : (status === 'REJECTED' ? '4px solid #DC2626' : '4px solid #2563EB') }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '12px' }}>
                   <div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
@@ -309,7 +408,17 @@ export default function StudentApplications({ currentUser }) {
                     <div style={{ display: 'flex', gap: '18px', fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '10px', flexWrap: 'wrap' }}>
                       <span>📍 {app.location || 'Hybrid'}</span>
                       <span>💰 Stipend: {String(app.stipend || 'Disclosed on Unstop').startsWith('₹') ? app.stipend : `₹${app.stipend}`}</span>
-                      <span>📅 Applied: {app.applied_at || 'Recently'}</span>
+                      <span>📅 Applied: {(() => {
+                        const dateStr = app.applied_at;
+                        if (!dateStr || dateStr === 'Recently') return 'Recently';
+                        try {
+                          const d = new Date(dateStr);
+                          if (!isNaN(d.getTime())) {
+                            return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+                          }
+                        } catch (e) {}
+                        return dateStr;
+                      })()}</span>
                     </div>
                   </div>
 
@@ -317,16 +426,47 @@ export default function StudentApplications({ currentUser }) {
                     <span className="badge badge-auth" style={{
                       fontSize: '0.82rem',
                       padding: '6px 14px',
-                      background: isUnstop ? '#EFF6FF' : (isOfferExtended ? '#D1FAE5' : (status.includes('PASSED') ? '#DBEAFE' : 'var(--glass-border)')),
-                      color: isUnstop ? '#1E40AF' : (isOfferExtended ? '#065F46' : (status.includes('PASSED') ? '#1E40AF' : 'var(--text-main)'))
+                      background: isUnstop ? '#EFF6FF' : (isOfferExtended ? '#D1FAE5' : (status === 'REJECTED' ? '#FEE2E2' : (status.includes('PASSED') ? '#DBEAFE' : 'var(--glass-border)'))),
+                      color: isUnstop ? '#1E40AF' : (isOfferExtended ? '#065F46' : (status === 'REJECTED' ? '#DC2626' : (status.includes('PASSED') ? '#1E40AF' : 'var(--text-main)'))),
+                      border: status === 'REJECTED' ? '1px solid #FCA5A5' : 'none'
                     }}>
-                      {isUnstop ? 'Applied Externally' : (isOfferExtended ? '🎉 OFFER EXTENDED' : status)}
+                      {isUnstop ? 'Applied Externally' : (isOfferExtended ? '🎉 OFFER EXTENDED' : (status === 'REJECTED' ? '🔴 APPLICATION REJECTED' : status))}
                     </span>
 
-                    {!isUnstop && score !== null && score > 0 && (
-                      <span style={{ fontSize: '0.8rem', fontWeight: 700, color: score >= 60 ? '#16A34A' : '#DC2626' }}>
-                        🎯 Screening Score: {score}% ({score >= 60 ? 'PASSED' : 'FAILED'})
-                      </span>
+                    {!isUnstop && (
+                      hasAiTest ? (
+                        status === 'PROCTORING_FAILED' ? (
+                          <span style={{ fontSize: '0.78rem', fontWeight: 700, color: '#DC2626', background: '#FEE2E2', padding: '2px 8px', borderRadius: '6px', border: '1px solid #FCA5A5' }}>
+                            🚫 Exam Disqualified (Proctoring Violation)
+                          </span>
+                        ) : status === 'REJECTED' ? (
+                          score !== null && score > 0 ? (
+                            <span style={{ fontSize: '0.8rem', fontWeight: 700, color: '#DC2626' }}>
+                              🎯 Screening Score: {score}% {"(FAILED (<60%))"}
+                            </span>
+                          ) : (
+                            <span style={{ fontSize: '0.78rem', fontWeight: 700, color: '#DC2626', background: '#FEE2E2', padding: '2px 8px', borderRadius: '6px', border: '1px solid #FCA5A5' }}>
+                              🎯 Application Rejected
+                            </span>
+                          )
+                        ) : isTestSubmitted ? (
+                          <span style={{ fontSize: '0.8rem', fontWeight: 700, color: (score !== null ? score >= 60 : status === 'TEST_PASSED') ? '#16A34A' : '#DC2626' }}>
+                            🎯 Screening Score: {score !== null ? `${score}%` : ''} {(score !== null ? score >= 60 : status === 'TEST_PASSED') ? 'PASSED (≥60%)' : 'FAILED (<60%)'}
+                          </span>
+                        ) : status === 'APPLIED' ? (
+                          <span style={{ fontSize: '0.78rem', fontWeight: 700, color: '#B45309', background: '#FEF3C7', padding: '2px 8px', borderRadius: '6px', border: '1px solid #FDE68A' }}>
+                            🎯 Screening Test: Locked (Awaiting Shortlist)
+                          </span>
+                        ) : (
+                          <span style={{ fontSize: '0.78rem', fontWeight: 700, color: '#2563EB', background: '#EFF6FF', padding: '2px 8px', borderRadius: '6px', border: '1px solid #BFDBFE' }}>
+                            🎯 Screening Test: Unlocked (Not Taken)
+                          </span>
+                        )
+                      ) : (
+                        <span style={{ fontSize: '0.76rem', fontWeight: 600, color: '#4B5563', background: '#F3F4F6', padding: '2px 8px', borderRadius: '6px', border: '1px solid #E5E7EB' }}>
+                          📋 Direct Application (No Screening Test)
+                        </span>
+                      )
                     )}
                   </div>
                 </div>
@@ -371,14 +511,45 @@ export default function StudentApplications({ currentUser }) {
                   )}
 
                   {canTakeTest && (
-                    <button
-                      onClick={() => handleOpenTestModal(app)}
-                      disabled={eligibilityChecking}
-                      className="btn-primary"
-                      style={{ padding: '8px 18px', fontSize: '0.82rem', display: 'inline-flex', alignItems: 'center', gap: '6px', opacity: eligibilityChecking ? 0.7 : 1 }}
-                    >
-                      <Award size={16} /> {eligibilityChecking ? 'Checking Eligibility...' : 'Take AI Screening Test'}
-                    </button>
+                    isDeadlinePassed ? (
+                      <span style={{
+                        padding: '8px 18px',
+                        fontSize: '0.82rem',
+                        fontWeight: 700,
+                        background: '#FEF2F2',
+                        color: '#DC2626',
+                        border: '1px solid #FCA5A5',
+                        borderRadius: '8px',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '6px'
+                      }}>
+                        ⏰ Test Deadline Expired ({deadlineStr})
+                      </span>
+                    ) : (
+                      <button
+                        onClick={() => handleOpenTestModal(app)}
+                        disabled={eligibilityChecking}
+                        className="btn-primary"
+                        style={{ padding: '8px 18px', fontSize: '0.82rem', display: 'inline-flex', alignItems: 'center', gap: '6px', opacity: eligibilityChecking ? 0.7 : 1 }}
+                      >
+                        <Award size={16} /> {eligibilityChecking ? 'Checking Eligibility...' : 'Take AI Screening Test'}
+                      </button>
+                    )
+                  )}
+
+                  {!isUnstop && !hasAiTest && status === 'SHORTLISTED' && (
+                    <span style={{
+                      fontSize: '0.78rem',
+                      color: '#166534',
+                      background: '#DCFCE7',
+                      border: '1px solid #BBF7D0',
+                      borderRadius: '8px',
+                      padding: '6px 12px',
+                      fontWeight: 700
+                    }}>
+                      ✓ Profile Shortlisted (Awaiting Offer)
+                    </span>
                   )}
 
                   {!isUnstop && !canTakeTest && status === 'APPLIED' && (
@@ -389,9 +560,14 @@ export default function StudentApplications({ currentUser }) {
                       border: '1px solid #FCD34D',
                       borderRadius: '8px',
                       padding: '6px 12px',
-                      fontWeight: 600
+                      fontWeight: 600,
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '6px'
                     }}>
-                      ⏳ Awaiting Recruiter Shortlisting
+                      {hasAiTest
+                        ? '⏳ Application Under Review — AI Screening Test will unlock once Shortlisted by Recruiter'
+                        : '⏳ Application Under Review — Awaiting Recruiter Shortlisting'}
                     </span>
                   )}
 
@@ -440,6 +616,82 @@ export default function StudentApplications({ currentUser }) {
             );
           })}
         </div>
+
+        {/* PAGINATION CONTROLS */}
+        {applications.length > ITEMS_PER_PAGE && (
+          <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '8px', marginTop: '8px', flexWrap: 'wrap' }}>
+            <button
+              type="button"
+              onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+              disabled={currentPage === 1}
+              aria-label="Previous page"
+              style={{
+                padding: '8px 16px',
+                fontSize: '0.84rem',
+                fontWeight: 600,
+                borderRadius: '8px',
+                border: '1px solid var(--border-light, #CBD5E1)',
+                background: currentPage === 1 ? '#F1F5F9' : '#FFFFFF',
+                color: currentPage === 1 ? '#94A3B8' : '#1E293B',
+                cursor: currentPage === 1 ? 'not-allowed' : 'pointer',
+                opacity: currentPage === 1 ? 0.6 : 1,
+                transition: 'all 0.2s ease'
+              }}
+            >
+              ← Previous
+            </button>
+
+            {Array.from({ length: totalPages }, (_, i) => i + 1).map(page => {
+              const isActive = page === currentPage;
+              return (
+                <button
+                  key={page}
+                  type="button"
+                  onClick={() => setCurrentPage(page)}
+                  aria-label={`Go to page ${page}`}
+                  style={{
+                    minWidth: '36px',
+                    height: '36px',
+                    padding: '0 8px',
+                    fontSize: '0.84rem',
+                    fontWeight: isActive ? 700 : 600,
+                    borderRadius: '8px',
+                    border: isActive ? '1px solid #2563EB' : '1px solid var(--border-light, #CBD5E1)',
+                    background: isActive ? '#2563EB' : '#FFFFFF',
+                    color: isActive ? '#FFFFFF' : '#1E293B',
+                    cursor: 'pointer',
+                    transition: 'all 0.2s ease',
+                    boxShadow: isActive ? '0 2px 6px rgba(37,99,235,0.25)' : 'none'
+                  }}
+                >
+                  {page}
+                </button>
+              );
+            })}
+
+            <button
+              type="button"
+              onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
+              disabled={currentPage === totalPages}
+              aria-label="Next page"
+              style={{
+                padding: '8px 16px',
+                fontSize: '0.84rem',
+                fontWeight: 600,
+                borderRadius: '8px',
+                border: '1px solid var(--border-light, #CBD5E1)',
+                background: currentPage === totalPages ? '#F1F5F9' : '#FFFFFF',
+                color: currentPage === totalPages ? '#94A3B8' : '#1E293B',
+                cursor: currentPage === totalPages ? 'not-allowed' : 'pointer',
+                opacity: currentPage === totalPages ? 0.6 : 1,
+                transition: 'all 0.2s ease'
+              }}
+            >
+              Next →
+            </button>
+          </div>
+        )}
+      </>
       ) : (
         <div className="glass-card" style={{ padding: '48px', textAlign: 'center', color: 'var(--text-muted)' }}>
           You have not applied for any internships yet. Explore internships to submit your applications.

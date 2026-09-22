@@ -17,8 +17,16 @@ public class AiEvaluationController {
         this.groqAiService = groqAiService;
     }
 
-    @PostMapping("/ai/evaluate-test")
+    @PostMapping("/ai/generate-test")
+    public ResponseEntity<?> generateTest(@RequestBody Map<String, Object> request) {
+        return ResponseEntity.ok(groqAiService.generateTestQuestions(request));
+    }
+
+    @PostMapping({"/ai/evaluate-test", "/ai/evaluate-answers"})
     public ResponseEntity<?> evaluateTest(@RequestBody Map<String, Object> request) {
+        if (request.containsKey("answers") || request.containsKey("aptitude")) {
+            return ResponseEntity.ok(groqAiService.evaluateTestAnswers(request));
+        }
         return ResponseEntity.ok(groqAiService.evaluateScreeningTest(request));
     }
 

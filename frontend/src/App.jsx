@@ -2,12 +2,12 @@ import React, { useState, useEffect } from 'react';
 import { API_CONFIG } from './config/apiConfig';
 
 import Header from './components/common/Header';
-import AIChatAssistant from './components/common/AIChatAssistant';
 import LandingPage from './components/landing/LandingPage';
 import StudentDashboard from './components/student/StudentDashboard';
 import ExploreInternships from './components/student/ExploreInternships';
 import StudentProfile from './components/student/StudentProfile';
 import StudentApplications from './components/student/StudentApplications';
+import CareerAdvisor from './components/student/CareerAdvisor';
 import CompanyDashboard from './components/company/CompanyDashboard';
 import PostInternship from './components/company/PostInternship';
 import ViewApplicants from './components/company/ViewApplicants';
@@ -24,7 +24,7 @@ export default function App() {
     return null;
   });
 
-  const [currentPath, setCurrentPath] = useState(() => window.location.pathname || '/');
+  const [currentPath, setCurrentPath] = useState(() => (window.location.pathname + window.location.search) || '/');
 
   const AUTH_URL = API_CONFIG.AUTH_SERVICE_URL;
   const STUDENT_URL = API_CONFIG.STUDENT_SERVICE_URL;
@@ -34,14 +34,15 @@ export default function App() {
   // Sync state on browser back/forward buttons
   useEffect(() => {
     const handlePopState = () => {
-      setCurrentPath(window.location.pathname || '/');
+      setCurrentPath((window.location.pathname + window.location.search) || '/');
     };
     window.addEventListener('popstate', handlePopState);
     return () => window.removeEventListener('popstate', handlePopState);
   }, []);
 
   const navigateTo = (path, tabKey) => {
-    if (window.location.pathname !== path) {
+    const fullCurrent = window.location.pathname + window.location.search;
+    if (fullCurrent !== path) {
       window.history.pushState({}, '', path);
     }
     setCurrentPath(path);
@@ -100,6 +101,7 @@ export default function App() {
     if (target === 'explore') navigateTo('/student/explore', 'explore');
     else if (target === 'applications') navigateTo('/student/applications', 'applications');
     else if (target === 'profile') navigateTo('/student/profile', 'profile');
+    else if (target === 'career-advisor' || target === 'career') navigateTo('/student/career-advisor', 'career-advisor');
     else navigateTo('/student/dashboard', 'dashboard');
   };
 
@@ -111,47 +113,82 @@ export default function App() {
     else navigateTo('/company/dashboard', 'dashboard');
   };
 
+  // Helper mapper for admin tab navigation
+  const handleAdminNavigate = (target) => {
+    if (target === 'users') navigateTo('/admin/users', 'users');
+    else if (target === 'users-students') navigateTo('/admin/users?role=STUDENTS', 'users');
+    else if (target === 'users-companies') navigateTo('/admin/users?role=COMPANIES', 'users');
+    else if (target === 'recruiter-verification' || target === 'verification') navigateTo('/admin/recruiter-verification', 'recruiter-verification');
+    else if (target === 'internship-analytics' || target === 'analytics') navigateTo('/admin/internship-analytics', 'internship-analytics');
+    else if (target === 'student-demographics' || target === 'demographics') navigateTo('/admin/student-demographics', 'student-demographics');
+    else navigateTo('/admin/dashboard', 'dashboard');
+  };
+
   // Route Content Resolver based on currentPath and user Role
   const renderContent = () => {
+    const cleanPath = currentPath.split('?')[0];
     if (role === 'ADMIN') {
-      if (currentPath !== '/admin/dashboard') {
+      if (cleanPath === '/admin/users') {
+        return <AdminDashboard key="users" apiBaseUrl={AUTH_URL} currentUser={currentUser} activeSection="users" onNavigate={handleAdminNavigate} />;
+      }
+      if (cleanPath === '/admin/recruiter-verification' || cleanPath === '/admin/verification') {
+        return <AdminDashboard key="verification" apiBaseUrl={AUTH_URL} currentUser={currentUser} activeSection="recruiter-verification" onNavigate={handleAdminNavigate} />;
+      }
+      if (cleanPath === '/admin/internship-analytics') {
+        return <AdminDashboard key="analytics" apiBaseUrl={AUTH_URL} currentUser={currentUser} activeSection="internship-analytics" onNavigate={handleAdminNavigate} />;
+      }
+      if (cleanPath === '/admin/student-demographics') {
+        return <AdminDashboard key="demographics" apiBaseUrl={AUTH_URL} currentUser={currentUser} activeSection="student-demographics" onNavigate={handleAdminNavigate} />;
+      }
+      if (cleanPath !== '/admin/dashboard') {
         window.history.replaceState({}, '', '/admin/dashboard');
       }
-      return <AdminDashboard apiBaseUrl={AUTH_URL} currentUser={currentUser} />;
+      return <AdminDashboard key="dashboard" apiBaseUrl={AUTH_URL} currentUser={currentUser} activeSection="dashboard" onNavigate={handleAdminNavigate} />;
     }
 
     if (role === 'COMPANY') {
-      if (currentPath === '/company/post-internship' || currentPath === '/company/post') {
+      if (cleanPath.startsWith('/admin')) {
+        window.history.replaceState({}, '', '/company/dashboard');
+        return <CompanyDashboard apiBaseUrl={COMPANY_URL} currentUser={currentUser} onNavigate={handleCompanyNavigate} />;
+      }
+      if (cleanPath === '/company/post-internship' || cleanPath === '/company/post') {
         return <PostInternship apiBaseUrl={COMPANY_URL} currentUser={currentUser} onNavigate={handleCompanyNavigate} />;
       }
-      if (currentPath === '/company/applicants' || currentPath === '/company/view-applicants') {
+      if (cleanPath === '/company/applicants' || cleanPath === '/company/view-applicants') {
         return <ViewApplicants apiBaseUrl={COMPANY_URL} currentUser={currentUser} />;
       }
-      if (currentPath === '/company/talent-search' || currentPath === '/company/sourcing') {
+      if (cleanPath === '/company/talent-search' || cleanPath === '/company/sourcing') {
         return <TalentSearch apiBaseUrl={COMPANY_URL} currentUser={currentUser} />;
       }
-      if (currentPath === '/company/profile' || currentPath === '/company/company-profile') {
+      if (cleanPath === '/company/profile' || cleanPath === '/company/company-profile') {
         return <CompanyProfile apiBaseUrl={COMPANY_URL} currentUser={currentUser} />;
       }
       // Default Company Dashboard
-      if (currentPath !== '/company/dashboard') {
+      if (cleanPath !== '/company/dashboard') {
         window.history.replaceState({}, '', '/company/dashboard');
       }
       return <CompanyDashboard apiBaseUrl={COMPANY_URL} currentUser={currentUser} onNavigate={handleCompanyNavigate} />;
     }
 
     // Default: STUDENT
-    if (currentPath === '/student/explore') {
+    if (cleanPath.startsWith('/admin')) {
+      window.history.replaceState({}, '', '/student/dashboard');
+      return <StudentDashboard apiBaseUrl={STUDENT_URL} currentUser={currentUser} onNavigate={handleStudentNavigate} />;
+    }
+    if (cleanPath === '/student/explore') {
       return <ExploreInternships apiBaseUrl={COMPANY_URL} currentUser={currentUser} />;
     }
-    if (currentPath === '/student/applications') {
+    if (cleanPath === '/student/applications') {
       return <StudentApplications apiBaseUrl={STUDENT_URL} currentUser={currentUser} />;
     }
-    if (currentPath === '/student/profile') {
+    if (cleanPath === '/student/profile') {
       return <StudentProfile apiBaseUrl={STUDENT_URL} currentUser={currentUser} />;
     }
+    if (cleanPath === '/student/career-advisor') {
+      return <CareerAdvisor currentUser={currentUser} onNavigate={handleStudentNavigate} />;
+    }
     // Default Student Dashboard
-    if (currentPath !== '/student/dashboard') {
+    if (cleanPath !== '/student/dashboard') {
       window.history.replaceState({}, '', '/student/dashboard');
     }
     return <StudentDashboard apiBaseUrl={STUDENT_URL} currentUser={currentUser} onNavigate={handleStudentNavigate} />;
@@ -159,6 +196,13 @@ export default function App() {
 
   // Current tab identifier for Header highlight
   const getCurrentTabIdentifier = () => {
+    if (role === 'ADMIN') {
+      if (currentPath.includes('users')) return 'users';
+      if (currentPath.includes('recruiter-verification') || currentPath.includes('verification')) return 'recruiter-verification';
+      if (currentPath.includes('analytics')) return 'internship-analytics';
+      if (currentPath.includes('demographics')) return 'student-demographics';
+      return 'dashboard';
+    }
     if (role === 'COMPANY') {
       if (currentPath.includes('post')) return 'post';
       if (currentPath.includes('applicant')) return 'applicants';
@@ -170,6 +214,7 @@ export default function App() {
       if (currentPath.includes('explore')) return 'explore';
       if (currentPath.includes('application')) return 'applications';
       if (currentPath.includes('profile')) return 'profile';
+      if (currentPath.includes('career-advisor')) return 'career-advisor';
       return 'dashboard';
     }
     return 'dashboard';
@@ -178,6 +223,7 @@ export default function App() {
   const handleHeaderNavigate = (target) => {
     if (role === 'COMPANY') handleCompanyNavigate(target);
     else if (role === 'STUDENT') handleStudentNavigate(target);
+    else if (role === 'ADMIN') handleAdminNavigate(target);
     else navigateTo('/admin/dashboard', 'dashboard');
   };
 
@@ -194,8 +240,6 @@ export default function App() {
       <main style={{ flex: 1, padding: '32px 24px', maxWidth: '1280px', margin: '0 auto', width: '100%' }}>
         {renderContent()}
       </main>
-
-      <AIChatAssistant apiBaseUrl={AI_URL} />
     </div>
   );
 }

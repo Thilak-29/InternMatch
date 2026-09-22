@@ -43,23 +43,30 @@ public class DatabaseInitializer implements CommandLineRunner {
                 String username = email.split("@")[0];
                 try {
                     jdbcTemplate.update(
-                            "INSERT INTO users (username, name, email, password_hash, role) VALUES (?, ?, ?, ?, 'ADMIN')",
+                            "INSERT INTO users (username, name, email, password_hash, role, email_verified) VALUES (?, ?, ?, ?, 'ADMIN', 1)",
                             username, name, email, encoded
                     );
                 } catch (Exception e1) {
                     try {
                         jdbcTemplate.update(
-                                "INSERT INTO users (username, name, email, password, role) VALUES (?, ?, ?, ?, 'ADMIN')",
+                                "INSERT INTO users (username, name, email, password, role, email_verified) VALUES (?, ?, ?, ?, 'ADMIN', 1)",
                                 username, name, email, encoded
                         );
                     } catch (Exception e2) {
                         jdbcTemplate.update(
-                                "INSERT INTO users (name, email, password_hash, role) VALUES (?, ?, ?, 'ADMIN')",
+                                "INSERT INTO users (name, email, password_hash, role, email_verified) VALUES (?, ?, ?, 'ADMIN', 1)",
                                 name, email, encoded
                         );
                     }
                 }
                 log.info("Ensured single admin account: {}", email);
+            } else {
+                try {
+                    jdbcTemplate.update(
+                            "UPDATE users SET email_verified = 1, role = 'ADMIN' WHERE LOWER(email) = LOWER(?)",
+                            email.toLowerCase()
+                    );
+                } catch (Exception ignored) {}
             }
         } catch (Exception e) {
             log.warn("Could not ensure admin user {}: {}", email, e.getMessage());

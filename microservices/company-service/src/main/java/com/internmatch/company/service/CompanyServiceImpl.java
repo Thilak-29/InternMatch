@@ -38,9 +38,13 @@ public class CompanyServiceImpl implements CompanyService {
 
         int hired       = 0;
         int shortlisted = 0;
+        int activeApplicants = 0;
         for (Map<String, Object> a : applicants) {
             Object rawSt = a.get("status") != null ? a.get("status") : a.get("STATUS");
             String st = rawSt != null ? rawSt.toString() : "";
+            // Exclude withdrawn / cancelled from all counts
+            if ("WITHDRAWN".equals(st) || "CANCELLED".equals(st) || "DELETED".equals(st)) continue;
+            activeApplicants++;
             if ("OFFER_ACCEPTED".equals(st) || "OFFER_SENT".equals(st) || "HIRED".equals(st)
                     || "OFFER_ISSUED".equals(st) || "OFFER_EXTENDED".equals(st) || "ACCEPTED".equals(st)) {
                 hired++;
@@ -51,7 +55,7 @@ public class CompanyServiceImpl implements CompanyService {
 
         Map<String, Object> res = new HashMap<>();
         res.put("total_internships", internships.size());
-        res.put("total_applicants",  applicants.size());
+        res.put("total_applicants",  activeApplicants); // only active (non-withdrawn)
         res.put("shortlisted", shortlisted);
         res.put("hired", hired);
         res.put("internships", internships);
@@ -84,6 +88,7 @@ public class CompanyServiceImpl implements CompanyService {
         Map<String, Object> res = new HashMap<>();
         res.put("success", true);
         res.put("id", generatedId);
+        res.put("internship_id", generatedId);
         res.put("message", "Internship posted successfully.");
         return res;
     }
@@ -145,6 +150,24 @@ public class CompanyServiceImpl implements CompanyService {
         }
 
         String canonicalStatus = status.trim().toUpperCase();
+
+        // Check existing application status before allowing transition to SHORTLISTED
+        if ("SHORTLISTED".equals(canonicalStatus)) {
+            String currentStatus = applicationRepository.getApplicationStatus(applicationId);
+            if (currentStatus != null) {
+                String currUpper = currentStatus.trim().toUpperCase();
+                List<String> nonShortlistableCurrent = List.of(
+                    "SHORTLISTED", "TEST_PASSED", "TEST_COMPLETED", "ACCEPTED", "OFFER_ISSUED", "OFFER_EXTENDED", "SELECTED", "HIRED", "REJECTED", "WITHDRAWN", "CANCELLED"
+                );
+                if (nonShortlistableCurrent.contains(currUpper)) {
+                    log.warn("Shortlist rejected for application {}: application is already in status {}", applicationId, currUpper);
+                    Map<String, Object> err = new HashMap<>();
+                    err.put("success", false);
+                    err.put("error", "Application cannot be shortlisted because it is already in status: " + currUpper);
+                    return err;
+                }
+            }
+        }
 
         // Persist to MySQL applications table + reverse-sync to student-service
         boolean updated = applicationRepository.updateStatus(applicationId, canonicalStatus);
@@ -213,6 +236,28 @@ public class CompanyServiceImpl implements CompanyService {
             Map<String, Object> res = new HashMap<>();
             res.put("success", false);
             res.put("error",   e.getMessage());
+            return res;
+        }
+    }
+
+    @Override
+    public Map<String, Object> withdrawApplication(int studentId, int internshipId) {
+        try {
+            // Mark as WITHDRAWN in DB
+            jdbcTemplate.update(
+                    "UPDATE applications SET status = 'WITHDRAWN' WHERE student_id = ? AND internship_id = ?",
+                    studentId, internshipId);
+            // Remove from shared memory
+            applicationRepository.removeWithdrawnFromMemory(studentId, internshipId);
+            Map<String, Object> res = new HashMap<>();
+            res.put("success", true);
+            res.put("message", "Application withdrawn and removed from recruiter view.");
+            return res;
+        } catch (Exception e) {
+            log.error("withdrawApplication failed: {}", e.getMessage(), e);
+            Map<String, Object> res = new HashMap<>();
+            res.put("success", false);
+            res.put("error", e.getMessage());
             return res;
         }
     }

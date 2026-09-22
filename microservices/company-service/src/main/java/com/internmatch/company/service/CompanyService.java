@@ -13,6 +13,7 @@ public interface CompanyService {
     List<Map<String, Object>> getCompanyApplicants(int companyId);
     Map<String, Object> updateApplicantStatus(int applicationId, String status, String stage);
     Map<String, Object> registerApplication(Map<String, Object> body);
+    Map<String, Object> withdrawApplication(int studentId, int internshipId);
     Map<String, Object> syncProfile(Map<String, Object> body);
     Map<String, Object> createScreeningTest(int internshipId, String title, int passingScore, int duration);
 }

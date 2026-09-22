@@ -25,13 +25,55 @@ public class UserRepository {
         loadUsersFromDatabase();
     }
 
-    private void initDatabaseSchema() {
-        try {
-            jdbcTemplate.execute("ALTER TABLE users ADD COLUMN email_verified BOOLEAN DEFAULT FALSE");
-            log.info("Verified/added email_verified column in users table.");
-        } catch (Exception ignored) {
-            // Column already exists
+    private static final Set<String> CONSUMER_EMAIL_DOMAINS = new HashSet<>(Arrays.asList(
+        "gmail.com", "yahoo.com", "outlook.com", "hotmail.com", "proton.me", "protonmail.com", "icloud.com", "mail.com", "aol.com", "zoho.com", "yandex.com"
+    ));
+
+    public static String extractDomain(String text) {
+        if (text == null || text.trim().isEmpty()) return "";
+        String clean = text.trim().toLowerCase();
+        if (clean.contains("@")) {
+            String[] parts = clean.split("@");
+            clean = parts[parts.length - 1];
         }
+        clean = clean.replaceAll("^https?://", "").replaceAll("^www\\.", "");
+        int slashIdx = clean.indexOf('/');
+        if (slashIdx != -1) {
+            clean = clean.substring(0, slashIdx);
+        }
+        int portIdx = clean.indexOf(':');
+        if (portIdx != -1) {
+            clean = clean.substring(0, portIdx);
+        }
+        return clean.trim();
+    }
+
+    public static boolean checkDomainMatch(String email, String website) {
+        String emailDomain = extractDomain(email);
+        String websiteDomain = extractDomain(website);
+
+        if (emailDomain.isEmpty() || CONSUMER_EMAIL_DOMAINS.contains(emailDomain)) {
+            return false;
+        }
+
+        if (websiteDomain.isEmpty()) {
+            return false;
+        }
+
+        return emailDomain.equals(websiteDomain) || emailDomain.endsWith("." + websiteDomain) || websiteDomain.endsWith("." + emailDomain);
+    }
+
+    private void initDatabaseSchema() {
+        try { jdbcTemplate.execute("ALTER TABLE users ADD COLUMN email_verified BOOLEAN DEFAULT FALSE"); } catch (Exception ignored) {}
+        try { jdbcTemplate.execute("ALTER TABLE users ADD COLUMN verification_status VARCHAR(50) DEFAULT 'APPROVED'"); } catch (Exception ignored) {}
+        try { jdbcTemplate.execute("ALTER TABLE users ADD COLUMN rejection_reason VARCHAR(1000)"); } catch (Exception ignored) {}
+        try { jdbcTemplate.execute("ALTER TABLE companies ADD COLUMN verification_status VARCHAR(50) DEFAULT 'APPROVED'"); } catch (Exception ignored) {}
+        try { jdbcTemplate.execute("ALTER TABLE companies ADD COLUMN rejection_reason VARCHAR(1000)"); } catch (Exception ignored) {}
+        try { jdbcTemplate.execute("ALTER TABLE companies ADD COLUMN company_linkedin VARCHAR(300)"); } catch (Exception ignored) {}
+        try { jdbcTemplate.execute("ALTER TABLE companies ADD COLUMN recruiter_linkedin VARCHAR(300)"); } catch (Exception ignored) {}
+        try { jdbcTemplate.execute("ALTER TABLE companies ADD COLUMN business_id VARCHAR(100)"); } catch (Exception ignored) {}
+        try { jdbcTemplate.execute("ALTER TABLE companies ADD COLUMN leetcode_url VARCHAR(300)"); } catch (Exception ignored) {}
+        log.info("Verified/added email_verified and recruiter verification columns in database.");
     }
 
     private void loadUsersFromDatabase() {
@@ -72,6 +114,8 @@ public class UserRepository {
 
         if (isExactAdminEmail(cleanEmail)) {
             finalRole = "ADMIN";
+            u.put("email_verified", true);
+            u.put("emailVerified", true);
         }
 
         u.put("id", id);
@@ -136,6 +180,8 @@ public class UserRepository {
                     if (isExactAdminEmail(email) || isExactAdminEmail(cleanId)) {
                         userMap.put("role", "ADMIN");
                         userMap.put("ROLE", "ADMIN");
+                        userMap.put("email_verified", true);
+                        userMap.put("emailVerified", true);
                     } else if ("COMPANY".equals(storedRole) || email.contains("google") || email.contains("nvidia") || email.contains("porsche") || email.contains("company") || 
                                uName.contains("google") || uName.contains("nvidia") || uName.contains("porsche") ||
                                name.contains("google") || name.contains("nvidia") || name.contains("porsche")) {
@@ -205,7 +251,6 @@ public class UserRepository {
                         "INSERT INTO users (username, name, email, password_hash, role) VALUES (?, ?, ?, ?, ?)",
                         cleanUsername, cleanName, cleanEmail, password, cleanRole
                 );
-
                 List<Map<String, Object>> maxId = jdbcTemplate.queryForList("SELECT MAX(id) as max_id FROM users");
                 if (!maxId.isEmpty() && maxId.get(0).get("max_id") != null) {
                     generatedId = Integer.parseInt(maxId.get(0).get("max_id").toString());
@@ -216,11 +261,19 @@ public class UserRepository {
                             "INSERT INTO users (username, name, email, password, role) VALUES (?, ?, ?, ?, ?)",
                             cleanUsername, cleanName, cleanEmail, password, cleanRole
                     );
+                    List<Map<String, Object>> maxId = jdbcTemplate.queryForList("SELECT MAX(id) as max_id FROM users");
+                    if (!maxId.isEmpty() && maxId.get(0).get("max_id") != null) {
+                        generatedId = Integer.parseInt(maxId.get(0).get("max_id").toString());
+                    }
                 } catch (Exception e2) {
                     jdbcTemplate.update(
                             "INSERT INTO users (name, email, password_hash, role) VALUES (?, ?, ?, ?)",
                             cleanName, cleanEmail, password, cleanRole
                     );
+                    List<Map<String, Object>> maxId = jdbcTemplate.queryForList("SELECT MAX(id) as max_id FROM users");
+                    if (!maxId.isEmpty() && maxId.get(0).get("max_id") != null) {
+                        generatedId = Integer.parseInt(maxId.get(0).get("max_id").toString());
+                    }
                 }
             }
         } catch (Exception e) {
@@ -264,15 +317,122 @@ public class UserRepository {
     }
 
     public void saveCompanyProfile(int userId, String companyName, String industry, String website, String location, String description) {
+        saveCompanyProfile(userId, companyName, industry, website, location, description, "", "", "", "", "PENDING_ADMIN_REVIEW");
+    }
+
+    public void saveCompanyProfile(int userId, String companyName, String industry, String website, String location, String description,
+                                   String companyLinkedin, String recruiterLinkedin, String businessId, String leetcodeUrl, String verificationStatus) {
+        String status = (verificationStatus != null && !verificationStatus.trim().isEmpty()) ? verificationStatus.trim().toUpperCase() : "PENDING_ADMIN_REVIEW";
         try {
             jdbcTemplate.update(
-                    "INSERT INTO companies (user_id, company_name, industry, website, location, description) VALUES (?, ?, ?, ?, ?, ?)",
-                    userId, companyName, industry, website, location, description
+                    "INSERT INTO companies (user_id, company_name, industry, website, location, description, company_linkedin, recruiter_linkedin, business_id, leetcode_url, verification_status) " +
+                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    userId, companyName, industry, website, location, description,
+                    companyLinkedin, recruiterLinkedin, businessId, leetcodeUrl, status
             );
-            log.info("Saved company profile in Oracle DB for user_id {}", userId);
+            try {
+                jdbcTemplate.update("UPDATE users SET verification_status = ? WHERE id = ?", status, userId);
+            } catch (Exception ignored) {}
+            log.info("Saved company profile in Oracle DB for user_id {} with status {}", userId, status);
         } catch (Exception e) {
             log.warn("Error saving company profile in Oracle DB for user_id {}: {}", userId, e.getMessage());
         }
+
+        Map<String, Object> prof = new HashMap<>();
+        prof.put("userId", userId);
+        prof.put("companyName", companyName);
+        prof.put("website", website);
+        prof.put("companyLinkedin", companyLinkedin);
+        prof.put("recruiterLinkedin", recruiterLinkedin);
+        prof.put("businessId", businessId);
+        prof.put("leetcodeUrl", leetcodeUrl);
+        prof.put("verificationStatus", status);
+        prof.put("verification_status", status);
+        memProfiles.put(userId, prof);
+    }
+
+    public List<Map<String, Object>> getAllRecruitersWithVerification() {
+        Map<Integer, Map<String, Object>> recruitersMap = new LinkedHashMap<>();
+
+        try {
+            String sql = "SELECT u.id, u.name, u.email, u.role, u.email_verified, u.created_at, " +
+                    "c.company_name, c.industry, c.website, c.location, c.description, " +
+                    "c.company_linkedin, c.recruiter_linkedin, c.business_id, c.leetcode_url, " +
+                    "COALESCE(c.verification_status, u.verification_status, 'APPROVED') as verification_status, " +
+                    "COALESCE(c.rejection_reason, u.rejection_reason, '') as rejection_reason " +
+                    "FROM users u " +
+                    "LEFT JOIN companies c ON u.id = c.user_id " +
+                    "WHERE UPPER(u.role) = 'COMPANY' " +
+                    "ORDER BY u.id DESC";
+            List<Map<String, Object>> dbRows = jdbcTemplate.queryForList(sql);
+            for (Map<String, Object> row : dbRows) {
+                Map<String, Object> norm = normalizeMap(row);
+                Object idObj = norm.get("id") != null ? norm.get("id") : norm.get("ID");
+                if (idObj instanceof Number) {
+                    int uid = ((Number) idObj).intValue();
+                    String email = norm.get("email") != null ? norm.get("email").toString() : "";
+                    String website = norm.get("website") != null ? norm.get("website").toString() : "";
+                    boolean domainMatch = checkDomainMatch(email, website);
+                    norm.put("domain_match", domainMatch);
+                    norm.put("domainMatch", domainMatch);
+                    recruitersMap.put(uid, norm);
+                }
+            }
+        } catch (Exception e) {
+            log.warn("Error fetching recruiters from DB: {}", e.getMessage());
+        }
+
+        for (Map<String, Object> u : memUsers.values()) {
+            String role = (String) u.getOrDefault("role", u.getOrDefault("ROLE", ""));
+            if ("COMPANY".equalsIgnoreCase(role)) {
+                Object idObj = u.get("id") != null ? u.get("id") : u.get("ID");
+                if (idObj instanceof Number) {
+                    int uid = ((Number) idObj).intValue();
+                    if (!recruitersMap.containsKey(uid)) {
+                        Map<String, Object> norm = normalizeMap(u);
+                        String email = norm.get("email") != null ? norm.get("email").toString() : "";
+                        String website = norm.get("website") != null ? norm.get("website").toString() : "";
+                        boolean domainMatch = checkDomainMatch(email, website);
+                        norm.put("domain_match", domainMatch);
+                        norm.put("domainMatch", domainMatch);
+                        if (!norm.containsKey("verification_status")) {
+                            norm.put("verification_status", "APPROVED");
+                        }
+                        recruitersMap.put(uid, norm);
+                    }
+                }
+            }
+        }
+
+        return new ArrayList<>(recruitersMap.values());
+    }
+
+    public boolean updateRecruiterVerificationStatus(int userId, String status, String rejectionReason) {
+        if (userId <= 0 || status == null || status.trim().isEmpty()) return false;
+        String cleanStatus = status.trim().toUpperCase();
+        String reason = rejectionReason != null ? rejectionReason.trim() : "";
+
+        try {
+            jdbcTemplate.update("UPDATE users SET verification_status = ?, rejection_reason = ? WHERE id = ?", cleanStatus, reason, userId);
+            try {
+                jdbcTemplate.update("UPDATE companies SET verification_status = ?, rejection_reason = ? WHERE user_id = ?", cleanStatus, reason, userId);
+            } catch (Exception ignored) {}
+            log.info("Updated recruiter verification status for user_id {} to {} (reason: {})", userId, cleanStatus, reason);
+        } catch (Exception e) {
+            log.warn("Error updating recruiter status for user_id {}: {}", userId, e.getMessage());
+        }
+
+        for (Map<String, Object> u : memUsers.values()) {
+            Object idObj = u.get("id") != null ? u.get("id") : u.get("ID");
+            if (idObj != null && Integer.parseInt(idObj.toString()) == userId) {
+                u.put("verification_status", cleanStatus);
+                u.put("verificationStatus", cleanStatus);
+                u.put("rejection_reason", reason);
+                u.put("rejectionReason", reason);
+                break;
+            }
+        }
+        return true;
     }
 
     public List<Map<String, Object>> getAllUsersWithProfiles() {

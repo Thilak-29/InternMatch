@@ -25,4 +25,7 @@ public interface StudentService {
 
     /** Persist a proctoring violation (tab switch / fullscreen exit) — auto-fails the exam. */
     Map<String, Object> recordProctoringViolation(int appId, int studentId);
+
+    Map<String,Object> getStudentResumeData(int studentId);
+    Map<String,Object> getApplicationResumeData(int applicationId);
 }

@@ -1,0 +1,211 @@
+/* Scoped styles for Career Advisor Page */
+.career-advisor-page {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  max-width: 1140px;
+  margin: 0 auto;
+  width: 100%;
+}
+
+.ca-header-card {
+  padding: 28px;
+  background: linear-gradient(135deg, #1E293B 0%, #0F172A 100%);
+  color: #FFFFFF;
+  border-radius: 14px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 16px;
+  box-shadow: 0 4px 14px rgba(15, 23, 42, 0.12);
+}
+
+.ca-header-title {
+  font-size: 1.5rem;
+  font-weight: 800;
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.ca-header-subtitle {
+  font-size: 0.88rem;
+  color: #94A3B8;
+  margin-top: 6px;
+}
+
+.ca-skills-card {
+  padding: 16px 20px;
+  background: #FFFFFF;
+  border: 1px solid var(--border-light, #E2E8F0);
+  border-radius: 12px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.03);
+}
+
+.ca-skills-title {
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: #475569;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-bottom: 10px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.ca-skills-pills {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.ca-skill-pill {
+  padding: 4px 12px;
+  background: #EFF6FF;
+  color: #1D4ED8;
+  border-radius: 16px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  border: 1px solid #BFDBFE;
+}
+
+.ca-empty-skills {
+  padding: 24px;
+  background: #FFFBEB;
+  border: 1px solid #FDE68A;
+  border-radius: 12px;
+  text-align: center;
+  color: #92400E;
+}
+
+.ca-empty-skills h4 {
+  font-size: 1rem;
+  font-weight: 700;
+  margin-bottom: 6px;
+}
+
+.ca-empty-skills p {
+  font-size: 0.85rem;
+  color: #B45309;
+  margin-bottom: 14px;
+}
+
+.ca-section-title {
+  font-size: 1.1rem;
+  font-weight: 800;
+  color: var(--text-main, #0F172A);
+  margin-bottom: 16px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.ca-card-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 20px;
+}
+
+@media (max-width: 900px) {
+  .ca-card-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.ca-course-card {
+  padding: 20px;
+  background: #FFFFFF;
+  border: 1px solid #E2E8F0;
+  border-radius: 12px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 14px;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.02);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.ca-course-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(37, 99, 235, 0.08);
+  border-color: #BFDBFE;
+}
+
+.ca-card-header-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.ca-card-badge {
+  font-size: 0.7rem;
+  font-weight: 700;
+  padding: 3px 8px;
+  border-radius: 8px;
+  background: #EFF6FF;
+  color: #1D4ED8;
+  white-space: nowrap;
+}
+
+.ca-card-title {
+  font-size: 0.95rem;
+  font-weight: 800;
+  color: var(--text-main, #0F172A);
+  margin-bottom: 4px;
+  line-height: 1.3;
+}
+
+.ca-card-provider {
+  font-size: 0.78rem;
+  color: #2563EB;
+  font-weight: 600;
+}
+
+.ca-card-reason {
+  font-size: 0.78rem;
+  color: #64748B;
+  line-height: 1.4;
+  margin-top: 8px;
+}
+
+.ca-card-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-top: 12px;
+  border-top: 1px solid #F1F5F9;
+  margin-top: auto;
+}
+
+.ca-cert-card {
+  padding: 20px;
+  background: #FFFFFF;
+  border: 1px solid #E2E8F0;
+  border-radius: 12px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 14px;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.02);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.ca-cert-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(217, 119, 6, 0.08);
+  border-color: #FDE68A;
+}
+
+.ca-loading-container {
+  padding: 48px;
+  text-align: center;
+  background: #FFFFFF;
+  border-radius: 12px;
+  border: 1px solid #E2E8F0;
+  color: #64748B;
+  font-size: 0.9rem;
+}

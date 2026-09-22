@@ -208,6 +208,9 @@ public class StudentServiceImpl implements StudentService {
         // Save resume metadata & text in repository
         profileRepository.updateResumeScore(studentId, score, originalFileName);
         profileRepository.updateResumeText(studentId, extractedText);
+        // Save resume binary to DB
+        String contentType = file != null ? file.getContentType() : "application/pdf";
+        profileRepository.saveResumeData(studentId, bytes, originalFileName, contentType != null ? contentType : "application/pdf");
 
         // 2. Query ai-service /api/v1/ai/parse-resume for structured profile JSON
         Map<String, Object> extractedProfile = new HashMap<>();
@@ -291,6 +294,18 @@ public class StudentServiceImpl implements StudentService {
             return normalizeMap(err);
         }
         if (appId > 0) {
+            // Attach resume snapshot to the application
+            try {
+                Map<String,Object> resumeData = profileRepository.getResumeData(studentId);
+                if (resumeData != null && resumeData.get("resume_data") != null) {
+                    byte[] rData = (byte[]) resumeData.get("resume_data");
+                    String rName = resumeData.get("resume_file_name") != null ? resumeData.get("resume_file_name").toString() : "resume.pdf";
+                    String rType = resumeData.get("resume_content_type") != null ? resumeData.get("resume_content_type").toString() : "application/pdf";
+                    applicationRepository.attachResumeToApplication(studentId, internshipId, rData, rName, rType);
+                }
+            } catch (Exception e) {
+                log.warn("Could not attach resume snapshot to application: {}", e.getMessage());
+            }
             notificationRepository.createNotification(studentId, "Application Confirmed",
                     "Your application for " + (roleTitle != null ? roleTitle : "internship") + " was submitted successfully.");
             Map<String, Object> resp = new HashMap<>();
@@ -378,7 +393,7 @@ public class StudentServiceImpl implements StudentService {
 
     @Override
     public Map<String, Object> updateApplicationStatus(int appId, String status) {
-        applicationRepository.updateTestScore(appId, 75.0); // update test score or status
+        applicationRepository.updateStatus(appId, status);
         Map<String, Object> resp = new HashMap<>();
         resp.put("success", true);
         resp.put("message", "Application status updated successfully.");
@@ -402,5 +417,15 @@ public class StudentServiceImpl implements StudentService {
     @Override
     public Map<String, Object> recordProctoringViolation(int appId, int studentId) {
         return normalizeMap(quizEligibilityService.recordProctoringViolation(appId, studentId));
+    }
+
+    @Override
+    public Map<String,Object> getStudentResumeData(int studentId) {
+        return profileRepository.getResumeData(studentId);
+    }
+
+    @Override
+    public Map<String,Object> getApplicationResumeData(int applicationId) {
+        return applicationRepository.getApplicationResume(applicationId);
     }
 }

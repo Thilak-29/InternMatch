@@ -1,5 +1,6 @@
 package com.internmatch.student.repository;
 
+import jakarta.annotation.PostConstruct;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -18,6 +19,40 @@ public class StudentProfileRepository {
 
     public StudentProfileRepository(JdbcTemplate jdbcTemplate) {
         this.jdbcTemplate = jdbcTemplate;
+    }
+
+    @PostConstruct
+    public void initSchema() {
+        log.info("Ensuring student_profiles table schema contains all profile columns...");
+        String[] columns = {
+            "bio TEXT",
+            "leetcode VARCHAR(500)",
+            "github VARCHAR(500)",
+            "linkedin VARCHAR(500)",
+            "portfolio VARCHAR(500)",
+            "address VARCHAR(1000)",
+            "location VARCHAR(500)",
+            "year_of_study VARCHAR(100)",
+            "phone VARCHAR(100)",
+            "gender VARCHAR(100)",
+            "dob VARCHAR(100)",
+            "skills VARCHAR(2000)",
+            "avatar_url VARCHAR(1000)",
+            "resume_file_name VARCHAR(500)",
+            "resume_content_type VARCHAR(100)",
+            "resume_text TEXT"
+        };
+
+        for (String col : columns) {
+            try {
+                jdbcTemplate.execute("ALTER TABLE student_profiles ADD COLUMN " + col);
+            } catch (Exception ignored) {
+                try {
+                    // Try Oracle ALTER syntax if MySQL syntax failed
+                    jdbcTemplate.execute("ALTER TABLE student_profiles ADD (" + col.replace("TEXT", "VARCHAR2(2000)").replace("VARCHAR", "VARCHAR2") + ")");
+                } catch (Exception ignored2) {}
+            }
+        }
     }
 
     private Map<String, Object> normalizeMap(Map<String, Object> raw) {
@@ -39,7 +74,7 @@ public class StudentProfileRepository {
 
         try {
             List<Map<String, Object>> dbRows = jdbcTemplate.queryForList(
-                    "SELECT u.name as user_name, u.email as user_email, u.phone as user_phone, u.gender as user_gender, u.dob as user_dob, sp.* " +
+                    "SELECT u.name as user_name, u.email as user_email, sp.* " +
                             "FROM users u " +
                             "LEFT JOIN student_profiles sp ON u.id = sp.user_id " +
                             "WHERE u.id = ?",
@@ -50,22 +85,13 @@ public class StudentProfileRepository {
                 if ((row.get("name") == null || row.get("name").toString().trim().isEmpty() || "Student Candidate".equalsIgnoreCase(row.get("name").toString().trim())) && row.get("user_name") != null) {
                     row.put("name", row.get("user_name"));
                 }
-                if ((row.get("phone") == null || row.get("phone").toString().trim().isEmpty()) && row.get("user_phone") != null) {
-                    row.put("phone", row.get("user_phone"));
-                }
-                if ((row.get("gender") == null || row.get("gender").toString().trim().isEmpty()) && row.get("user_gender") != null) {
-                    row.put("gender", row.get("user_gender"));
-                }
-                if ((row.get("dob") == null || row.get("dob").toString().trim().isEmpty()) && row.get("user_dob") != null) {
-                    row.put("dob", row.get("user_dob"));
-                }
                 Map<String, Object> norm = normalizeMap(row);
                 profileCache.put(userId, norm);
                 return norm;
             }
 
             List<Map<String, Object>> userRows = jdbcTemplate.queryForList(
-                    "SELECT id, name, email, phone, gender, dob FROM users WHERE id = ?",
+                    "SELECT id, name, email FROM users WHERE id = ?",
                     userId
             );
             if (!userRows.isEmpty()) {
@@ -93,12 +119,17 @@ public class StudentProfileRepository {
                 fresh.put("address", "");
                 fresh.put("location", "");
                 fresh.put("skills", "");
+                fresh.put("bio", "");
+                fresh.put("leetcode", "");
+                fresh.put("github", "");
+                fresh.put("linkedin", "");
+                fresh.put("portfolio", "");
                 Map<String, Object> norm = normalizeMap(fresh);
                 profileCache.put(userId, norm);
                 return norm;
             }
         } catch (Exception e) {
-            log.warn("Oracle DB fetch for user_id {} timed out ({}), returning cached profile...", userId, e.getMessage());
+            log.warn("DB fetch for user_id {} notice: {}, using default structure", userId, e.getMessage());
         }
 
         Map<String, Object> fallback = new HashMap<>();
@@ -116,6 +147,11 @@ public class StudentProfileRepository {
         fallback.put("grad_year", 2026);
         fallback.put("address", "");
         fallback.put("skills", "");
+        fallback.put("bio", "");
+        fallback.put("leetcode", "");
+        fallback.put("github", "");
+        fallback.put("linkedin", "");
+        fallback.put("portfolio", "");
         Map<String, Object> norm = normalizeMap(fallback);
         profileCache.put(userId, norm);
         return norm;
@@ -154,55 +190,60 @@ public class StudentProfileRepository {
             updated.put("avatar_url", avatarUrl);
             updated.put("avatar", avatarUrl);
         }
-        profileCache.put(userId, normalizeMap(updated));
-        log.info("INSTANT MEMORY UPDATE successful for user_id {}", userId);
 
-        new Thread(() -> {
-            try {
-                jdbcTemplate.update(
-                        "UPDATE users SET name = COALESCE(?, name), phone = ?, gender = ?, dob = ? WHERE id = ?",
-                        (name != null && !name.trim().isEmpty()) ? name.trim() : null,
-                        phone, gender, dob, userId
-                );
-
-                Integer count = jdbcTemplate.queryForObject(
-                        "SELECT COUNT(*) FROM student_profiles WHERE user_id = ?",
-                        Integer.class, userId
-                );
-
-                if (count != null && count > 0) {
-                    try {
-                        jdbcTemplate.update(
-                                "UPDATE student_profiles SET name = ?, phone = ?, gender = ?, dob = ?, college = ?, grad_year = ?, cgpa = ?, address = ?, " +
-                                        "leetcode = ?, github = ?, year_of_study = ?, degree = ?, branch = ?, linkedin = ?, portfolio = ?, bio = ?, skills = ?, avatar_url = ? " +
-                                        "WHERE user_id = ?",
-                                name, phone, gender, dob, college, gradYear, cgpa, location, leetcode, github, yearOfStudy, degree, branch, linkedin, portfolio, bio, skills, avatarUrl, userId
-                        );
-                    } catch (Exception e) {
-                        jdbcTemplate.update(
-                                "UPDATE student_profiles SET name = ?, college = ?, grad_year = ?, cgpa = ?, degree = ?, branch = ?, skills = ?, avatar_url = ? WHERE user_id = ?",
-                                name, college, gradYear, cgpa, degree, branch, skills, avatarUrl, userId
-                        );
-                    }
-                } else {
-                    try {
-                        jdbcTemplate.update(
-                                "INSERT INTO student_profiles (user_id, name, phone, gender, dob, college, grad_year, cgpa, address, leetcode, github, year_of_study, degree, branch, linkedin, portfolio, bio, skills, avatar_url) " +
-                                        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                                userId, name, phone, gender, dob, college, gradYear, cgpa, location, leetcode, github, yearOfStudy, degree, branch, linkedin, portfolio, bio, skills, avatarUrl
-                        );
-                    } catch (Exception e) {
-                        jdbcTemplate.update(
-                                "INSERT INTO student_profiles (user_id, name, college, grad_year, cgpa, degree, branch, skills, avatar_url) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                                userId, name, college, gradYear, cgpa, degree, branch, skills, avatarUrl
-                        );
-                    }
-                }
-                log.info("Background Oracle DB persistence complete for user_id {}", userId);
-            } catch (Exception e) {
-                log.warn("Background Oracle DB persistence skipped for user_id {}: {}", userId, e.getMessage());
+        // 1. Synchronously persist to Database (users + student_profiles)
+        try {
+            if (name != null && !name.trim().isEmpty()) {
+                try {
+                    jdbcTemplate.update("UPDATE users SET name = ? WHERE id = ?", name.trim(), userId);
+                } catch (Exception ignored) {}
             }
+        } catch (Exception ignored) {}
 
+        try {
+            Integer count = 0;
+            try {
+                count = jdbcTemplate.queryForObject("SELECT COUNT(*) FROM student_profiles WHERE user_id = ?", Integer.class, userId);
+            } catch (Exception ignored) {}
+
+            if (count != null && count > 0) {
+                try {
+                    jdbcTemplate.update(
+                            "UPDATE student_profiles SET name = ?, phone = ?, gender = ?, dob = ?, college = ?, grad_year = ?, cgpa = ?, address = ?, " +
+                                    "leetcode = ?, github = ?, year_of_study = ?, degree = ?, branch = ?, linkedin = ?, portfolio = ?, bio = ?, skills = ?, avatar_url = ? " +
+                                    "WHERE user_id = ?",
+                            name, phone, gender, dob, college, gradYear, cgpa, location, leetcode, github, yearOfStudy, degree, branch, linkedin, portfolio, bio, skills, avatarUrl, userId
+                    );
+                } catch (Exception e) {
+                    jdbcTemplate.update(
+                            "UPDATE student_profiles SET name = ?, college = ?, grad_year = ?, cgpa = ?, degree = ?, branch = ?, skills = ?, avatar_url = ? WHERE user_id = ?",
+                            name, college, gradYear, cgpa, degree, branch, skills, avatarUrl, userId
+                    );
+                }
+            } else {
+                try {
+                    jdbcTemplate.update(
+                            "INSERT INTO student_profiles (user_id, name, phone, gender, dob, college, grad_year, cgpa, address, leetcode, github, year_of_study, degree, branch, linkedin, portfolio, bio, skills, avatar_url) " +
+                                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                            userId, name, phone, gender, dob, college, gradYear, cgpa, location, leetcode, github, yearOfStudy, degree, branch, linkedin, portfolio, bio, skills, avatarUrl
+                    );
+                } catch (Exception e) {
+                    jdbcTemplate.update(
+                            "INSERT INTO student_profiles (user_id, name, college, grad_year, cgpa, degree, branch, skills, avatar_url) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                            userId, name, college, gradYear, cgpa, degree, branch, skills, avatarUrl
+                    );
+                }
+            }
+            log.info("Database profile persistence successful for user_id {}", userId);
+        } catch (Exception e) {
+            log.warn("Database profile persistence error for user_id {}: {}", userId, e.getMessage());
+        }
+
+        // 2. Store in memory cache
+        profileCache.put(userId, normalizeMap(updated));
+
+        // 3. Background sync to company-service
+        new Thread(() -> {
             try {
                 java.net.URL url = new java.net.URL("http://localhost:8083/api/v1/company/profile/sync");
                 java.net.HttpURLConnection conn = (java.net.HttpURLConnection) url.openConnection();
@@ -222,7 +263,6 @@ public class StudentProfileRepository {
                 );
                 conn.getOutputStream().write(jsonPayload.getBytes("UTF-8"));
                 conn.getResponseCode();
-                log.info("Synced profile for user_id {} to company-service", userId);
             } catch (Exception ignored) {}
         }).start();
     }
@@ -240,7 +280,7 @@ public class StudentProfileRepository {
         }
         try {
             jdbcTemplate.update("UPDATE student_profiles SET resume_score = ?, resume_file_name = ? WHERE user_id = ?", score, fileName, userId);
-            log.info("Oracle DB updated resume_score={} for user_id={}", score, userId);
+            log.info("Updated resume_score={} for user_id={}", score, userId);
         } catch (Exception e) {
             try {
                 jdbcTemplate.update("UPDATE student_profiles SET resume_score = ? WHERE user_id = ?", score, userId);
@@ -258,5 +298,40 @@ public class StudentProfileRepository {
         try {
             jdbcTemplate.update("UPDATE student_profiles SET resume_text = ? WHERE user_id = ?", text, userId);
         } catch (Exception ignored) {}
+    }
+
+    public void saveResumeData(int userId, byte[] data, String fileName, String contentType) {
+        try {
+            Integer count = jdbcTemplate.queryForObject("SELECT COUNT(*) FROM student_profiles WHERE user_id = ?", Integer.class, userId);
+            if (count == null || count == 0) {
+                jdbcTemplate.update("INSERT INTO student_profiles (user_id, resume_file_name, resume_content_type, resume_data) VALUES (?, ?, ?, ?)", userId, fileName, contentType != null ? contentType : "application/pdf", data);
+            } else {
+                jdbcTemplate.update(
+                    "UPDATE student_profiles SET resume_data = ?, resume_file_name = ?, resume_content_type = ? WHERE user_id = ?",
+                    data, fileName, contentType != null ? contentType : "application/pdf", userId
+                );
+            }
+            if (profileCache.containsKey(userId)) {
+                profileCache.get(userId).put("resume_file_name", fileName);
+                profileCache.get(userId).put("RESUME_FILE_NAME", fileName);
+                profileCache.get(userId).put("resume_content_type", contentType);
+            }
+            log.info("Saved resume binary ({} bytes) for user_id={}", data != null ? data.length : 0, userId);
+        } catch (Exception e) {
+            log.warn("Could not save resume_data for user_id={}: {}", userId, e.getMessage());
+        }
+    }
+
+    public Map<String,Object> getResumeData(int userId) {
+        try {
+            List<Map<String,Object>> rows = jdbcTemplate.queryForList(
+                "SELECT resume_data, resume_file_name, resume_content_type FROM student_profiles WHERE user_id = ?",
+                userId
+            );
+            if (!rows.isEmpty()) return rows.get(0);
+        } catch (Exception e) {
+            log.warn("Could not fetch resume_data for user_id={}: {}", userId, e.getMessage());
+        }
+        return Collections.emptyMap();
     }
 }
