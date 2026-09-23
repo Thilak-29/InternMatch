@@ -1,0 +1,11 @@
+[providers]
+providers = ["java"]
+
+[phases.setup]
+nixPkgs = ["jdk21", "maven"]
+
+[phases.build]
+cmds = ["mvn clean package -DskipTests"]
+
+[start]
+cmd = "java -jar target/*.jar"

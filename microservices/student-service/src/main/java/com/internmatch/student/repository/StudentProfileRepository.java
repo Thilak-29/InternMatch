@@ -242,10 +242,10 @@ public class StudentProfileRepository {
         // 2. Store in memory cache
         profileCache.put(userId, normalizeMap(updated));
 
-        // 3. Background sync to company-service
         new Thread(() -> {
             try {
-                java.net.URL url = new java.net.URL("http://localhost:8083/api/v1/company/profile/sync");
+                String companyServiceUrl = System.getenv("COMPANY_SERVICE_URL") != null ? System.getenv("COMPANY_SERVICE_URL") : "http://localhost:8083";
+                java.net.URL url = new java.net.URL(companyServiceUrl.replaceAll("/+$", "") + "/api/v1/company/profile/sync");
                 java.net.HttpURLConnection conn = (java.net.HttpURLConnection) url.openConnection();
                 conn.setRequestMethod("POST");
                 conn.setRequestProperty("Content-Type", "application/json");

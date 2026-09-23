@@ -215,7 +215,8 @@ public class StudentServiceImpl implements StudentService {
         // 2. Query ai-service /api/v1/ai/parse-resume for structured profile JSON
         Map<String, Object> extractedProfile = new HashMap<>();
         try {
-            java.net.URL url = new java.net.URL("http://localhost:8084/api/v1/ai/parse-resume");
+            String aiServiceUrl = System.getenv("AI_SERVICE_URL") != null ? System.getenv("AI_SERVICE_URL") : "http://localhost:8084";
+            java.net.URL url = new java.net.URL(aiServiceUrl.replaceAll("/+$", "") + "/api/v1/ai/parse-resume");
             java.net.HttpURLConnection conn = (java.net.HttpURLConnection) url.openConnection();
             conn.setRequestMethod("POST");
             conn.setRequestProperty("Content-Type", "application/json");

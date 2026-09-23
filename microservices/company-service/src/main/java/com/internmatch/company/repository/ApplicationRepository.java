@@ -199,10 +199,10 @@ public class ApplicationRepository {
             }
         }
 
-        // Reverse sync to student-service (port 8082)
         new Thread(() -> {
             try {
-                java.net.URL url = new java.net.URL("http://localhost:8082/api/v1/student/applications/" + applicationId + "/status");
+                String studentServiceUrl = System.getenv("STUDENT_SERVICE_URL") != null ? System.getenv("STUDENT_SERVICE_URL") : "http://localhost:8082";
+                java.net.URL url = new java.net.URL(studentServiceUrl.replaceAll("/+$", "") + "/api/v1/student/applications/" + applicationId + "/status");
                 java.net.HttpURLConnection conn = (java.net.HttpURLConnection) url.openConnection();
                 conn.setRequestMethod("PUT");
                 conn.setRequestProperty("Content-Type", "application/json");
@@ -320,7 +320,8 @@ public class ApplicationRepository {
                     } catch (Exception ignored) {}
                     if (studentId > 0 && (college == null || college.trim().isEmpty() || degree == null || degree.trim().isEmpty())) {
                         try {
-                            java.net.URL url = new java.net.URL("http://localhost:8082/api/v1/student/" + studentId + "/profile");
+                            String studentServiceUrl = System.getenv("STUDENT_SERVICE_URL") != null ? System.getenv("STUDENT_SERVICE_URL") : "http://localhost:8082";
+                            java.net.URL url = new java.net.URL(studentServiceUrl.replaceAll("/+$", "") + "/api/v1/student/" + studentId + "/profile");
                             java.net.HttpURLConnection conn = (java.net.HttpURLConnection) url.openConnection();
                             conn.setRequestMethod("GET");
                             conn.setConnectTimeout(2000);

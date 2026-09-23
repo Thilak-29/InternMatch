@@ -342,10 +342,10 @@ public class ApplicationRepository {
         memRecord.put("match_score", 90);
         SHARED_MEM_APPLICATIONS.put(generatedAppId, memRecord);
 
-        // Sync to company-service
         new Thread(() -> {
             try {
-                java.net.URL url = new java.net.URL("http://localhost:8083/api/v1/company/applications/sync");
+                String companyServiceUrl = System.getenv("COMPANY_SERVICE_URL") != null ? System.getenv("COMPANY_SERVICE_URL") : "http://localhost:8083";
+                java.net.URL url = new java.net.URL(companyServiceUrl.replaceAll("/+$", "") + "/api/v1/company/applications/sync");
                 java.net.HttpURLConnection conn = (java.net.HttpURLConnection) url.openConnection();
                 conn.setRequestMethod("POST");
                 conn.setRequestProperty("Content-Type", "application/json");
@@ -482,10 +482,10 @@ public class ApplicationRepository {
             log.warn("Failed to update test_score for application {}: {}", appId, e.getMessage());
         }
 
-        // Fire background HTTP sync to company-service (port 8083)
         new Thread(() -> {
             try {
-                java.net.URL url = new java.net.URL("http://localhost:8083/api/v1/company/applications/" + appId + "/status");
+                String companyServiceUrl = System.getenv("COMPANY_SERVICE_URL") != null ? System.getenv("COMPANY_SERVICE_URL") : "http://localhost:8083";
+                java.net.URL url = new java.net.URL(companyServiceUrl.replaceAll("/+$", "") + "/api/v1/company/applications/" + appId + "/status");
                 java.net.HttpURLConnection conn = (java.net.HttpURLConnection) url.openConnection();
                 conn.setRequestMethod("PUT");
                 conn.setRequestProperty("Content-Type", "application/json");
