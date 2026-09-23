@@ -127,47 +127,18 @@ export default function LandingPage({ onLoginSuccess, apiBaseUrl = API_CONFIG.AU
           setErrorMsg(data?.detail || data?.error || 'Invalid login credentials. Please check password.');
         }
       } catch (err) {
-        console.warn('Backend service unreachable, activating seamless Demo Mode for Vercel:', err);
-        let demoRole = role;
-        const lowerId = cleanId.toLowerCase();
-        if (lowerId.includes('admin') || lowerId === 'thilakvignesh@gmail.com') {
-          demoRole = 'ADMIN';
-        } else if (lowerId.includes('nvidia') || lowerId.includes('recruiter') || lowerId.includes('company') || role === 'COMPANY') {
-          demoRole = 'COMPANY';
-        } else {
-          demoRole = 'STUDENT';
-        }
-
-        const demoUserData = {
-          success: true,
-          token: 'demo-jwt-token-' + Date.now(),
-          user: {
-            id: demoRole === 'ADMIN' ? 15 : (demoRole === 'COMPANY' ? 30 : 1),
-            userId: demoRole === 'ADMIN' ? 15 : (demoRole === 'COMPANY' ? 30 : 1),
-            name: demoRole === 'ADMIN' ? 'Thilak Vignesh (Admin)' : (demoRole === 'COMPANY' ? (companyName || 'NVIDIA Corporation') : (cleanId.includes('@') ? cleanId.split('@')[0] : cleanId)),
-            email: cleanId.includes('@') ? cleanId : (demoRole === 'ADMIN' ? 'thilakvignesh@gmail.com' : (demoRole === 'COMPANY' ? 'recruiter@nvidia.com' : `${cleanId}@gmail.com`)),
-            role: demoRole,
-            company_id: demoRole === 'COMPANY' ? 1 : null,
-            company_name: demoRole === 'COMPANY' ? 'NVIDIA Corporation' : null,
-          }
-        };
-
-        onLoginSuccess(demoUserData);
+        setErrorMsg('Backend connection error. Please ensure Spring Boot Auth Service is running.');
       } finally {
         setIsLoading(false);
       }
     } else if (authMode === 'register') {
       // Registration Flow
       if (role === 'STUDENT') {
-        if (!name.trim() || !email.trim() || !phone.trim() || !regPassword.trim() || !college.trim()) {
-          setErrorMsg('❌ Name, Email, Phone Number, Password, and College Name are required.');
+        if (!name.trim() || !email.trim() || !phone.trim() || !regPassword.trim() || !college.trim() || !degree.trim() || !department.trim() || !yearOfStudy.trim() || !gradYear.trim() || !cgpa.trim() || skills.length === 0 || !leetcode.trim() || !github.trim()) {
+          setErrorMsg('❌ All student profile fields marked with * are strictly mandatory.');
           setIsLoading(false);
           return;
         }
-
-        const effectiveSkills = skills && skills.length > 0 ? skills : ['Java', 'React', 'SQL'];
-        const effectiveLeetcode = leetcode.trim() || 'leetcode_user';
-        const effectiveGithub = github.trim() || 'github_user';
 
         const payload = {
           account_type: 'STUDENT',
@@ -177,19 +148,19 @@ export default function LandingPage({ onLoginSuccess, apiBaseUrl = API_CONFIG.AU
           username: username.trim() || email.trim().split('@')[0],
           password: regPassword,
           college: college.trim(),
-          degree: degree.trim() || 'B.E',
-          department: department.trim() || 'Computer Science & Eng.',
-          branch: department.trim() || 'Computer Science & Eng.',
-          year_of_study: yearOfStudy.trim() || '3rd Year',
+          degree: degree.trim(),
+          department: department.trim(),
+          branch: department.trim(),
+          year_of_study: yearOfStudy.trim(),
           grad_year: parseInt(gradYear, 10) || 2026,
-          cgpa: parseFloat(cgpa) || 8.0,
-          skills: effectiveSkills.join(', '),
-          leetcode: effectiveLeetcode,
-          github: effectiveGithub,
+          cgpa: parseFloat(cgpa) || 0.0,
+          skills: skills.join(', '),
+          leetcode: leetcode.trim(),
+          github: github.trim(),
           linkedin: linkedin.trim(),
           portfolio: portfolio.trim(),
-          gender: gender || 'Prefer not to say',
-          location: location.trim() || 'Coimbatore'
+          gender: gender,
+          location: location.trim()
         };
 
         try {
@@ -200,28 +171,20 @@ export default function LandingPage({ onLoginSuccess, apiBaseUrl = API_CONFIG.AU
           });
           const data = await res.json().catch(() => null);
 
-          if ((res.ok && data && data.success) || (data && data.verification_required)) {
-            setForgotEmail(data?.email || email.trim());
-            setAuthMode('verify_registration_otp');
-            setInfoMsg(`Registration recorded! A 6-digit OTP verification code has been sent to ${data?.email || email.trim()}.`);
-            setResendTimer(30);
-          } else if (data?.detail && data.detail.toLowerCase().includes('already registered')) {
-            setForgotEmail(email.trim());
-            setAuthMode('verify_registration_otp');
-            setInfoMsg(data.detail + ' Enter the verification code sent to your email.');
-            setResendTimer(30);
+          if (res.ok && data && data.success) {
+            if (data.verification_required) {
+              setForgotEmail(data.email || email);
+              setAuthMode('verify_registration_otp');
+              setInfoMsg(`Registration recorded! Verification code dispatched to ${data.email || email}. (Fast verification code: 123456 or check your email)`);
+              setResendTimer(30);
+            } else {
+              onLoginSuccess(data);
+            }
           } else {
-            setForgotEmail(email.trim());
-            setAuthMode('verify_registration_otp');
-            setInfoMsg(`Verification code sent to ${email.trim()}.`);
-            setResendTimer(30);
+            setErrorMsg(data?.detail || data?.message || data?.error || 'Student registration failed.');
           }
         } catch (err) {
-          console.warn('Registration fetch notice, switching to OTP verification:', err);
-          setForgotEmail(email.trim());
-          setAuthMode('verify_registration_otp');
-          setInfoMsg(`Verification code sent to ${email.trim()}.`);
-          setResendTimer(30);
+          setErrorMsg('Backend connection error during registration.');
         } finally {
           setIsLoading(false);
         }
@@ -261,23 +224,20 @@ export default function LandingPage({ onLoginSuccess, apiBaseUrl = API_CONFIG.AU
           });
           const data = await res.json().catch(() => null);
 
-          if ((res.ok && data && data.success) || (data && data.verification_required)) {
-            setForgotEmail(data?.email || companyEmail.trim());
-            setAuthMode('verify_registration_otp');
-            setInfoMsg(`Recruiter registration recorded! Verification code sent to ${data?.email || companyEmail.trim()}.`);
-            setResendTimer(30);
+          if (res.ok && data && data.success) {
+            if (data.verification_required) {
+              setForgotEmail(data.email || companyEmail);
+              setAuthMode('verify_registration_otp');
+              setInfoMsg(`Registration recorded! Verification code dispatched to ${data.email || companyEmail}. (Fast verification code: 123456 or check your email)`);
+              setResendTimer(30);
+            } else {
+              onLoginSuccess(data);
+            }
           } else {
-            setForgotEmail(companyEmail.trim());
-            setAuthMode('verify_registration_otp');
-            setInfoMsg(`Verification code sent to ${companyEmail.trim()}.`);
-            setResendTimer(30);
+            setErrorMsg(data?.detail || data?.message || data?.error || 'Company registration failed.');
           }
         } catch (err) {
-          console.warn('Recruiter registration fetch notice:', err);
-          setForgotEmail(companyEmail.trim());
-          setAuthMode('verify_registration_otp');
-          setInfoMsg(`Verification code sent to ${companyEmail.trim()}.`);
-          setResendTimer(30);
+          setErrorMsg('Backend connection error during registration.');
         } finally {
           setIsLoading(false);
         }
@@ -297,7 +257,7 @@ export default function LandingPage({ onLoginSuccess, apiBaseUrl = API_CONFIG.AU
       return;
     }
 
-    const cleanEmail = (forgotEmail || email || companyEmail || identifier || 'user@domain.com').trim();
+    const cleanEmail = (forgotEmail || email || companyEmail || identifier || '').trim();
 
     setIsLoading(true);
     try {
@@ -313,44 +273,11 @@ export default function LandingPage({ onLoginSuccess, apiBaseUrl = API_CONFIG.AU
         setTimeout(() => {
           onLoginSuccess(data);
         }, 600);
-      } else if (cleanOtp === '123456') {
-        setInfoMsg('Email verified successfully! Your account is active.');
-        const fallbackData = {
-          success: true,
-          token: 'demo-jwt-token-' + Date.now(),
-          user: {
-            id: role === 'COMPANY' ? 30 : 1,
-            userId: role === 'COMPANY' ? 30 : 1,
-            name: role === 'COMPANY' ? (companyName || 'Company Recruiter') : (name || cleanEmail.split('@')[0]),
-            email: cleanEmail,
-            role: role === 'COMPANY' ? 'COMPANY' : 'STUDENT',
-            email_verified: true,
-          }
-        };
-        setTimeout(() => {
-          onLoginSuccess(fallbackData);
-        }, 600);
       } else {
-        setErrorMsg(data?.detail || data?.error || 'Invalid OTP verification code. Please check your email.');
+        setErrorMsg(data?.detail || data?.error || 'Invalid OTP verification code.');
       }
     } catch (err) {
-      console.warn('Backend connection notice on OTP verification, activating session:', err);
-      setInfoMsg('Email verified successfully! Your account is active.');
-      const fallbackData = {
-        success: true,
-        token: 'demo-jwt-token-' + Date.now(),
-        user: {
-          id: role === 'COMPANY' ? 30 : 1,
-          userId: role === 'COMPANY' ? 30 : 1,
-          name: role === 'COMPANY' ? (companyName || 'Company Recruiter') : (name || cleanEmail.split('@')[0]),
-          email: cleanEmail,
-          role: role === 'COMPANY' ? 'COMPANY' : 'STUDENT',
-          email_verified: true,
-        }
-      };
-      setTimeout(() => {
-        onLoginSuccess(fallbackData);
-      }, 600);
+      setErrorMsg('Backend connection error reaching Auth Service.');
     } finally {
       setIsLoading(false);
     }
@@ -956,8 +883,8 @@ export default function LandingPage({ onLoginSuccess, apiBaseUrl = API_CONFIG.AU
                     onChange={(e) => setOtpCode(e.target.value.replace(/[^0-9]/g, ''))}
                     style={{ width: '100%', padding: '12px 14px', borderRadius: '8px', background: '#FFFFFF', border: '2px solid #2563EB', color: '#0F172A', fontSize: '1.25rem', fontWeight: 800, letterSpacing: '0.3em', textAlign: 'center', outline: 'none' }}
                   />
-                  <div style={{ marginTop: '8px', fontSize: '0.8rem', color: '#166534', background: '#DCFCE7', border: '1px solid #86EFAC', padding: '8px 12px', borderRadius: '6px', textAlign: 'center', fontWeight: 600 }}>
-                    📧 Verification code sent to your email address.
+                  <div style={{ marginTop: '8px', fontSize: '0.8rem', color: '#1E40AF', background: '#EFF6FF', border: '1px solid #BFDBFE', padding: '8px 12px', borderRadius: '6px', textAlign: 'center', fontWeight: 600 }}>
+                    💡 Code sent to email! If email delivery is delayed, enter fast code: <strong>123456</strong>
                   </div>
                 </div>
 
@@ -1048,8 +975,8 @@ export default function LandingPage({ onLoginSuccess, apiBaseUrl = API_CONFIG.AU
                     onChange={(e) => setOtpCode(e.target.value.replace(/[^0-9]/g, ''))}
                     style={{ width: '100%', padding: '12px 14px', borderRadius: '8px', background: '#FFFFFF', border: '2px solid #2563EB', color: '#0F172A', fontSize: '1.2rem', fontWeight: 800, letterSpacing: '0.3em', textAlign: 'center', outline: 'none' }}
                   />
-                  <div style={{ marginTop: '8px', fontSize: '0.8rem', color: '#166534', background: '#DCFCE7', border: '1px solid #86EFAC', padding: '8px 12px', borderRadius: '6px', textAlign: 'center', fontWeight: 600 }}>
-                    📧 Verification code sent to your email address.
+                  <div style={{ marginTop: '8px', fontSize: '0.8rem', color: '#1E40AF', background: '#EFF6FF', border: '1px solid #BFDBFE', padding: '8px 12px', borderRadius: '6px', textAlign: 'center', fontWeight: 600 }}>
+                    💡 Code sent to email! If email delivery is delayed, enter fast code: <strong>123456</strong>
                   </div>
                 </div>
 
