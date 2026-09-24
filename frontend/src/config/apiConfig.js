@@ -1,8 +1,13 @@
+const cleanUrl = (url, fallback) => {
+  const val = url || fallback;
+  return typeof val === 'string' ? val.replace(/\/+$/, '') : val;
+};
+
 export const API_CONFIG = {
-  AUTH_SERVICE_URL: import.meta.env.VITE_AUTH_SERVICE_URL || import.meta.env.VITE_API_BASE_URL || 'http://localhost:8081',
-  STUDENT_SERVICE_URL: import.meta.env.VITE_STUDENT_SERVICE_URL || import.meta.env.VITE_API_BASE_URL || 'http://localhost:8082',
-  COMPANY_SERVICE_URL: import.meta.env.VITE_COMPANY_SERVICE_URL || import.meta.env.VITE_API_BASE_URL || 'http://localhost:8083',
-  AI_SERVICE_URL: import.meta.env.VITE_AI_SERVICE_URL || import.meta.env.VITE_API_BASE_URL || 'http://localhost:8084',
+  AUTH_SERVICE_URL: cleanUrl(import.meta.env.VITE_AUTH_SERVICE_URL || import.meta.env.VITE_API_BASE_URL, 'http://localhost:8081'),
+  STUDENT_SERVICE_URL: cleanUrl(import.meta.env.VITE_STUDENT_SERVICE_URL || import.meta.env.VITE_API_BASE_URL, 'http://localhost:8082'),
+  COMPANY_SERVICE_URL: cleanUrl(import.meta.env.VITE_COMPANY_SERVICE_URL || import.meta.env.VITE_API_BASE_URL, 'http://localhost:8083'),
+  AI_SERVICE_URL: cleanUrl(import.meta.env.VITE_AI_SERVICE_URL || import.meta.env.VITE_API_BASE_URL, 'http://localhost:8084'),
 
   getUrl(service) {
     switch (service) {
@@ -21,3 +26,4 @@ export const API_CONFIG = {
 };
 
 export default API_CONFIG;
+

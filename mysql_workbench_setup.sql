@@ -17,6 +17,9 @@ CREATE TABLE IF NOT EXISTS users (
   phone VARCHAR(50),
   gender VARCHAR(50),
   dob VARCHAR(50),
+  email_verified BOOLEAN DEFAULT FALSE,
+  verification_status VARCHAR(50) DEFAULT 'APPROVED',
+  rejection_reason VARCHAR(1000),
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
@@ -35,7 +38,14 @@ CREATE TABLE IF NOT EXISTS student_profiles (
   address VARCHAR(255) DEFAULT 'Coimbatore',
   phone VARCHAR(50),
   gender VARCHAR(50) DEFAULT 'Male',
+  dob VARCHAR(50),
   resume_file_name VARCHAR(255),
+  resume_content_type VARCHAR(100) DEFAULT 'application/pdf',
+  resume_data LONGBLOB,
+  resume_text LONGTEXT,
+  resume_score INT DEFAULT 85,
+  avatar_url TEXT,
+  bio TEXT,
   leetcode VARCHAR(150),
   github VARCHAR(150),
   linkedin VARCHAR(255),
@@ -54,6 +64,12 @@ CREATE TABLE IF NOT EXISTS companies (
   website VARCHAR(255) DEFAULT 'https://nvidia.com',
   location VARCHAR(255) DEFAULT 'Coimbatore / Hybrid',
   description TEXT,
+  verification_status VARCHAR(50) DEFAULT 'APPROVED',
+  rejection_reason VARCHAR(1000),
+  company_linkedin VARCHAR(300),
+  recruiter_linkedin VARCHAR(300),
+  business_id VARCHAR(100),
+  leetcode_url VARCHAR(300),
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
@@ -75,6 +91,7 @@ CREATE TABLE IF NOT EXISTS internships (
   openings INT DEFAULT 5,
   application_deadline VARCHAR(100),
   status VARCHAR(50) DEFAULT 'ACTIVE',
+  is_active TINYINT(1) DEFAULT 1,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
@@ -93,10 +110,19 @@ CREATE TABLE IF NOT EXISTS applications (
   stipend DECIMAL(10,2),
   work_mode VARCHAR(50),
   duration VARCHAR(50),
-  test_score DECIMAL(5,2) DEFAULT 0.00,
-  match_score DECIMAL(5,2) DEFAULT 90.00,
   status VARCHAR(50) DEFAULT 'APPLIED',
+  source VARCHAR(100) DEFAULT 'INTERNAL',
+  external_id VARCHAR(150),
+  application_url TEXT,
+  resume_file_name VARCHAR(255),
+  resume_content_type VARCHAR(100),
+  resume_data LONGBLOB,
+  test_score DECIMAL(5,2) DEFAULT 0.00,
+  proctor_warnings INT DEFAULT 0,
+  stage VARCHAR(50) DEFAULT 'ASSESSMENT',
+  match_score DECIMAL(5,2) DEFAULT 90.00,
   applied_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (student_id) REFERENCES users(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
@@ -110,6 +136,33 @@ CREATE TABLE IF NOT EXISTS notifications (
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- 7. SCREENING TESTS TABLE
+CREATE TABLE IF NOT EXISTS screening_tests (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  internship_id INT NOT NULL UNIQUE,
+  title VARCHAR(255) NOT NULL,
+  passing_score DECIMAL(5,2) DEFAULT 60.00,
+  duration_minutes INT DEFAULT 45,
+  status VARCHAR(50) DEFAULT 'ACTIVE',
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- 8. PASSWORD RESETS TABLE
+CREATE TABLE IF NOT EXISTS password_resets (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  email VARCHAR(255) NOT NULL,
+  otp_hash VARCHAR(255) NOT NULL,
+  reset_token VARCHAR(255) DEFAULT NULL,
+  expires_at DATETIME NOT NULL,
+  reset_token_expires_at DATETIME DEFAULT NULL,
+  attempt_count INT DEFAULT 0,
+  used TINYINT(1) DEFAULT 0,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  INDEX idx_email (email),
+  INDEX idx_reset_token (reset_token)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
 
 -- ====================================================================
 -- INITIAL SEED DATA FOR DEMO & TESTING

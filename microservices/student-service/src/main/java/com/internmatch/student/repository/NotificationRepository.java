@@ -43,11 +43,20 @@ public class NotificationRepository {
     public List<Map<String, Object>> findByUserId(int userId) {
         if (userId <= 0) return Collections.emptyList();
         try {
-            List<Map<String, Object>> dbRows = jdbcTemplate.queryForList(
-                    "SELECT id, user_id, message, type, is_read, TO_CHAR(created_at, 'YYYY-MM-DD HH24:MI') as created_at " +
-                            "FROM notifications WHERE user_id = ? ORDER BY id DESC",
-                    userId
-            );
+            List<Map<String, Object>> dbRows;
+            try {
+                dbRows = jdbcTemplate.queryForList(
+                        "SELECT id, user_id, message, type, is_read, DATE_FORMAT(created_at, '%Y-%m-%d %H:%i') as created_at " +
+                                "FROM notifications WHERE user_id = ? ORDER BY id DESC",
+                        userId
+                );
+            } catch (Exception mySqlEx) {
+                dbRows = jdbcTemplate.queryForList(
+                        "SELECT id, user_id, message, type, is_read, TO_CHAR(created_at, 'YYYY-MM-DD HH24:MI') as created_at " +
+                                "FROM notifications WHERE user_id = ? ORDER BY id DESC",
+                        userId
+                );
+            }
             return normalizeList(dbRows);
         } catch (Exception e) {
             log.warn("Fetch notifications notice for user {}: {}", userId, e.getMessage());
@@ -63,11 +72,18 @@ public class NotificationRepository {
         if (userId <= 0) return;
         try {
             jdbcTemplate.update(
-                    "INSERT INTO notifications (id, user_id, message, type, is_read) VALUES (SEQ_NOTIFICATIONS.NEXTVAL, ?, ?, ?, 0)",
+                    "INSERT INTO notifications (user_id, message, type, is_read) VALUES (?, ?, ?, 0)",
                     userId, (title != null ? title + ": " : "") + message, type != null ? type : "INFO"
             );
         } catch (Exception e1) {
-            log.warn("Notification insert skipped for user {}: {}", userId, e1.getMessage());
+            try {
+                jdbcTemplate.update(
+                        "INSERT INTO notifications (id, user_id, message, type, is_read) VALUES (SEQ_NOTIFICATIONS.NEXTVAL, ?, ?, ?, 0)",
+                        userId, (title != null ? title + ": " : "") + message, type != null ? type : "INFO"
+                );
+            } catch (Exception e2) {
+                log.warn("Notification insert skipped for user {}: {}", userId, e2.getMessage());
+            }
         }
     }
 
